@@ -30,6 +30,12 @@ namespace Stockfish::Benchmark {
 
 // Utility to verify move generation. All the leaf nodes up
 // to the given depth are generated and counted, and the sum is returned.
+//
+// Moving a dark piece reveals it. Such a move is a chance node: it is expanded
+// into one child per kind of piece that can be revealed (each kind is counted
+// once, regardless of how many of that kind are left in the pool). Without
+// this the dark piece would stay hidden on a non-starting square and the check
+// information of the child position would never be computed.
 template<bool Root>
 uint64_t perft(Position& pos, Depth depth) {
 
@@ -38,6 +44,8 @@ uint64_t perft(Position& pos, Depth depth) {
     uint64_t   cnt, nodes = 0;
     const bool leaf = (depth == 2);
 
+    auto count = [&]() { return leaf ? MoveList<LEGAL>(pos).size() : perft<false>(pos, depth - 1); };
+
     for (const auto& m : MoveList<LEGAL>(pos))
     {
         if (Root && depth <= 1)
@@ -45,7 +53,20 @@ uint64_t perft(Position& pos, Depth depth) {
         else
         {
             pos.do_move(m, st);
-            cnt = leaf ? MoveList<LEGAL>(pos).size() : perft<false>(pos, depth - 1);
+
+            if (pos.is_dark(m.to_sq()))
+            {
+                cnt = 0;
+                for (const auto& [pc, num] : pos.rest_pieces(~pos.side_to_move()))
+                {
+                    Piece fromPc = pos.do_flip(m.to_sq(), pc);
+                    cnt += count();
+                    pos.undo_flip(m.to_sq(), fromPc);
+                }
+            }
+            else
+                cnt = count();
+
             nodes += cnt;
             pos.undo_move(m);
         }
