@@ -209,7 +209,10 @@ Position& Position::set(const string& fenStr, StateInfo* si, Thread* th) {
           }
       }
 
-      if (isdigit(token)) {
+      // A count is only meaningful after a pool piece letter (not after x/X, a king,
+      // or at the start of the field): color_of(NO_PIECE) asserts, and in release
+      // builds the count was silently added to Red's pool as NO_PIECE.
+      if (isdigit(token) && pt != NO_PIECE && type_of(pt) != KING) {
           for (int i = 0; i < std::min((token - '0'), 5); i++)
           {
               restPieces[color_of(pt)].push_back(pt);
