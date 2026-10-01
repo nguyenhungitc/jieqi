@@ -42,6 +42,7 @@ namespace Stockfish {
 namespace Zobrist {
 
 Key psq[PIECE_NB + 1][SQUARE_NB];
+Key rest[PIECE_NB][MAX_REST_COUNT + 1];
 Key side, noPawns;
 }
 
@@ -106,6 +107,14 @@ void Position::init() {
 
     Zobrist::side    = rng.rand<Key>();
     Zobrist::noPawns = rng.rand<Key>();
+
+    // Keys for the pool of unrevealed pieces. They must not reuse psq[][]:
+    // e.g. psq[W_ROOK][SQ_A0] is the key of a rook on a0, and reusing it for
+    // "one rook in the pool" makes both XOR to zero. Drawn after all other keys
+    // so that the existing keys are unchanged.
+    for (Piece pc : Pieces)
+        for (int i = 0; i <= MAX_REST_COUNT; ++i)
+            Zobrist::rest[pc][i] = rng.rand<Key>();
 }
 
 
@@ -184,7 +193,7 @@ Position& Position::set(const string& fenStr, StateInfo* si) {
         {
             Piece pc = Piece(idx);
             ss >> token;
-            restPieces[pc] = token - '0';
+            restPieces[pc] = std::clamp(int(token) - '0', 0, MAX_REST_COUNT);
         }
     }
 
@@ -277,7 +286,7 @@ void Position::set_state() const {
     for (const auto& color : {WHITE, BLACK})
         for (const auto& [piece, count] : rest_pieces(color))
             for (int i = 0; i < count; ++i)
-                st->key ^= Zobrist::psq[piece][i];
+                st->key ^= Zobrist::rest[piece][i];
 
     if (sideToMove == BLACK)
         st->key ^= Zobrist::side;
@@ -512,7 +521,7 @@ Piece Position::do_flip(Square s, Piece pc, DirtyPiece* dp, const TranspositionT
     st->checkersBB = checkers_to(us, king_square(them));
 
     // Update hash key
-    st->key ^= Zobrist::psq[pc][s] ^ Zobrist::psq[pc][restPieces[pc]];
+    st->key ^= Zobrist::psq[pc][s] ^ Zobrist::rest[pc][restPieces[pc]];
     // If the moving piece is a pawn, update pawn hash key.
     if (type_of(pc) == PAWN)
         st->pawnKey ^= Zobrist::psq[pc][s];
@@ -549,7 +558,7 @@ void Position::undo_flip(Square s, Piece fromPc) {
     // Update hash key. This must mirror do_flip(), which toggled the pool slot
     // of index restPieces[pc] *after* decrementing it, so toggle it *before*
     // incrementing it back.
-    st->key ^= Zobrist::psq[pc][s] ^ Zobrist::psq[pc][restPieces[pc]];
+    st->key ^= Zobrist::psq[pc][s] ^ Zobrist::rest[pc][restPieces[pc]];
 
     restPieces[pc]++;
     remove_piece(s);
@@ -570,6 +579,21 @@ void Position::undo_flip(Square s, Piece fromPc) {
     }
 
     assert(pos_is_ok());
+}
+
+
+// Removes one piece from the pool of unrevealed pieces, when the identity of
+// a captured dark piece becomes known. Keeps the hash key consistent with
+// set_state().
+void Position::reveal_captured(Piece pc) {
+
+    assert(pc != NO_PIECE && type_of(pc) != KING && restPieces[pc] > 0);
+
+    if (restPieces[pc] <= 0)
+        return;
+
+    restPieces[pc]--;
+    st->key ^= Zobrist::rest[pc][restPieces[pc]];
 }
 
 

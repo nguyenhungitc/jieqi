@@ -137,6 +137,7 @@ class Position {
     Piece
     do_flip(Square s, Piece pc, DirtyPiece* dp = nullptr, const TranspositionTable* tt = nullptr);
     void undo_flip(Square s, Piece fromPc);
+    void reveal_captured(Piece pc);
 
     // Static Exchange Evaluation
     bool see_ge(Move m, int threshold = 0) const;
@@ -158,7 +159,6 @@ class Position {
     Value    major_material() const;
 
     const int&                         rest_piece(Piece pc) const;
-    int&                               rest_piece(Piece pc);
     std::vector<std::pair<Piece, int>> rest_pieces(Color c) const;
 
     // Position consistency check, for debugging
@@ -292,8 +292,6 @@ inline Value Position::major_material() const {
 }
 
 inline const int& Position::rest_piece(Piece pc) const { return restPieces[pc]; }
-
-inline int& Position::rest_piece(Piece pc) { return restPieces[pc]; }
 
 inline std::vector<std::pair<Piece, int>> Position::rest_pieces(Color c) const {
     std::vector<std::pair<Piece, int>> pieces;

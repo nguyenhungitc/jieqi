@@ -124,6 +124,10 @@ using Key      = uint64_t;
 using Bitboard = __uint128_t;
 
 constexpr int MAX_MOVES = 128;
+
+// Maximum number of pieces of one kind in the pool of unrevealed pieces
+// (5 pawns; 2 of every other kind, the king is never hidden)
+constexpr int MAX_REST_COUNT = 5;
 constexpr int MAX_PLY   = 246;
 
 enum Color : int8_t {

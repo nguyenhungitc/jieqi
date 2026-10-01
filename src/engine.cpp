@@ -176,12 +176,12 @@ void Engine::set_position(const std::string& fen, const std::vector<std::string>
             if (pos.is_dark(m.to_sq()))
                 pos.do_flip(m.to_sq(), Piece(PieceToChar.find(move[4])));
             else
-                pos.rest_piece(Piece(PieceToChar.find(move[4])))--;
+                pos.reveal_captured(Piece(PieceToChar.find(move[4])));
         }
         else if (move.length() == 6)
         {
             pos.do_flip(m.to_sq(), Piece(PieceToChar.find(move[4])));
-            pos.rest_piece(Piece(PieceToChar.find(move[5])))--;
+            pos.reveal_captured(Piece(PieceToChar.find(move[5])));
         }
     }
 }
