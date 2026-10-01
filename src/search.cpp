@@ -1331,8 +1331,16 @@ dark_while:
           }
           fromWhile = false;
           if (darkTryTimes == 0) {
-              pos.undo_move(move);
-              continue;
+              // Dark-depth limit reached: same fallback as in qsearch() rather than
+              // dropping a legal move (dark_undo sets value = vTmp).
+              vTmp = -evaluate(pos);
+              if (PvNode)
+              {
+                  // No child search ran: give update_pv() an empty child line.
+                  (ss+1)->pv = pv;
+                  (ss+1)->pv[0] = MOVE_NONE;
+              }
+              goto dark_undo;
           }
           else
           {
@@ -1861,14 +1869,19 @@ dark_undo:
               SC.append(pos.piece_on(to_sq(move)), vTmp, typecount);
               pos.setDark();
           }
-          if (tryTypeTimes == 0) {
-              pos.undo_move(move);
-              continue;
+          // getDark() expands nothing past the dark-depth limit. Skipping the move made
+          // qsearch return mated_in() when every evasion was a dark move, although legal
+          // moves existed. Use the static value of the unrevealed position instead.
+          if (tryTypeTimes == 0)
+          {
+              value = -evaluate(pos);
+              // No child qsearch ran, so nothing initialised the child PV that
+              // update_pv() reads if this move raises alpha.
+              if (PvNode)
+                  (ss+1)->pv[0] = MOVE_NONE;
           }
           else
-          {
               value = SC.CalcEvg();
-          }
       }
       else
       {
