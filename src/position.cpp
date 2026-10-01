@@ -567,6 +567,7 @@ bool Position::getDark(StateInfo& newSt, int& typecount, bool& isDarkDepth) {
     Value darkV = Value(restPieces[us].evgValue());
     isDarkDepth = st->darkDepth > MAXDARKDEPTH || st->darkTypes > MAXDARKTYPES;
     if (st->darkDepth - MAXDARKDEPTH > QDARKDEPTH)return false;
+    Key poolKey = 0;
     while (st->darkTypeIndex < BISHOP)
     {
         st->darkTypeIndex++;
@@ -576,19 +577,32 @@ bool Position::getDark(StateInfo& newSt, int& typecount, bool& isDarkDepth) {
         pc = restPieces[us].pop_back(t);
         if (pc == NO_PIECE)continue;
         typecount = restPieces[us].countType(t);
-        st->key ^= Zobrist::psqDark[pc][typecount];
+        poolKey = Zobrist::psqDark[pc][typecount];
         typecount++;
         break;
     }
     if (pc == NO_PIECE)return false;
 
-    // Update the bloom filter
-    ++filter[st->key];
+    // The revealed position differs from the chance node only by the pool and by the
+    // identity of the piece on ds; the side to move is the same. Its key is therefore
+    // the chance node's key with those two changes, and nothing else. In particular the
+    // chance node's own key and the bloom filter are left alone: the chance node is not
+    // part of the game history (newSt.previous skips it), and its parent was already
+    // added to the filter by do_move().
     thisThread->nodes.fetch_add(1, std::memory_order_relaxed);
-    Key k = st->key ^ Zobrist::side;
+    Key k = st->key ^ poolKey;
     std::memcpy(&newSt, st, offsetof(StateInfo, key));
     newSt.previous = st->previous;
     newSt.previousDark = st;
+    // Fields after 'key' are not copied by the memcpy above. The revealed state stands
+    // for the position after st->move, so it inherits the move and the captured piece;
+    // search reads both (priorCapture, captured_piece(), chase detection).
+    newSt.move = st->move;
+    newSt.capturedPiece = st->capturedPiece;
+    newSt.chased = 0;
+    newSt.darkPiece = NO_PIECE;
+    newSt.darkSquare = SQ_NONE;
+    newSt.darkTypeIndex = NO_PIECE_TYPE;
     st = &newSt;
     //++gamePly;
     //++st->pliesFromNull;
@@ -643,17 +657,15 @@ void Position::setDark() {
 
     //update rest
     Piece p = piece_on(st->darkSquare);
-    st->key ^= Zobrist::psqDark[p][restPieces[~sideToMove].countType(type_of(p))];
     restPieces[~sideToMove].push_back(p);
 
     //replcae
     remove_piece(st->darkSquare, false);
     put_piece(st->darkPiece, st->darkSquare, false);
-    st->key ^= Zobrist::psq[st->darkPiece][st->darkSquare];
     //--gamePly;
 
-    // Update the bloom filter
-    --filter[st->key];
+    // getDark() changed neither the chance node's key nor the bloom filter, so there
+    // is nothing to undo here.
 
     assert(pos_is_ok());
 }
