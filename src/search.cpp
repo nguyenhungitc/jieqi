@@ -25,6 +25,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <deque>
 #include <initializer_list>
 #include <string>
 #include <utility>
@@ -1960,20 +1961,24 @@ void SearchManager::pv(const Search::Worker&     worker,
             v = VALUE_ZERO;
 
         std::string pv;
-        Position tempPos;
-        StateInfo st;
+        Position    tempPos;
+        StateInfo   st;
+        // StateInfo objects must outlive every do_move() on tempPos, because each
+        // new state keeps a pointer to the previous one.
+        std::deque<StateInfo> pvStates;
         tempPos.set(pos, &st);
-        
+
         for (Move m : rootMoves[i].pv)
         {
             pv += UCIEngine::move(m);
-            
+
+            // Stop at the first move of a dark piece: what follows depends on
+            // the revealed piece, which is not known yet.
             if (tempPos.move_dark(m))
                 break;
-            
-            StateInfo moveSt;
-            tempPos.do_move(m, moveSt);
-            
+
+            tempPos.do_move(m, pvStates.emplace_back());
+
             pv += " ";
         }
 
