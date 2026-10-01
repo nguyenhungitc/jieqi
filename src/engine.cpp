@@ -165,6 +165,24 @@ void Engine::set_position(const std::string& fen, const std::vector<std::string>
     if (std::string reason; !pos.pool_is_consistent(&reason))
         sync_cout << "info string Invalid position: " << reason << sync_endl;
 
+    // Parses one character naming a revealed piece of color c, which must still
+    // be in the pool. Returns NO_PIECE if the character is not acceptable.
+    auto revealed = [&](char ch, Color c) {
+        size_t idx = PieceToChar.find(ch);
+        if (idx == std::string_view::npos || idx == 0 || idx >= size_t(PIECE_NB))
+            return NO_PIECE;
+        Piece pc = Piece(idx);
+        if (type_of(pc) == NO_PIECE_TYPE || type_of(pc) == KING || color_of(pc) != c
+            || pos.rest_piece(pc) <= 0)
+            return NO_PIECE;
+        return pc;
+    };
+
+    // Moves are given in the usual coordinate notation, followed by
+    //  - the piece revealed by the move, if a dark piece was moved (mandatory),
+    //  - then the identity of the captured piece, if a dark piece was captured
+    //    (optional: the owner of the captured piece may not know it).
+    // e.g. "a3a4P", "b2b9Cn" (cannon revealed, captured dark piece was a knight).
     for (const auto& move : moves)
     {
         auto m = UCIEngine::to_move(pos, move);
@@ -172,20 +190,44 @@ void Engine::set_position(const std::string& fen, const std::vector<std::string>
         if (m == Move::none())
             break;
 
+        const Color us          = pos.side_to_move();
+        const bool  moveDark    = pos.move_dark(m);
+        const bool  captureDark = pos.capture(m) && pos.is_dark(m.to_sq());
+
+        Piece       flipped = NO_PIECE, captured = NO_PIECE;
+        size_t      i       = 4;
+        std::string error;
+
+        if (moveDark)
+        {
+            if (move.size() <= i)
+                error = "missing the revealed piece";
+            else if ((flipped = revealed(move[i++], us)) == NO_PIECE)
+                error = "invalid revealed piece";
+        }
+
+        if (error.empty() && captureDark && move.size() > i
+            && (captured = revealed(move[i++], ~us)) == NO_PIECE)
+            error = "invalid captured piece";
+
+        if (error.empty() && move.size() > i)
+            error = "unexpected characters";
+
+        if (!error.empty())
+        {
+            sync_cout << "info string Invalid move " << move << ": " << error
+                      << ", ignoring this and the following moves" << sync_endl;
+            break;
+        }
+
         states->emplace_back();
         pos.do_move(m, states->back());
-        if (move.length() == 5)
-        {
-            if (pos.is_dark(m.to_sq()))
-                pos.do_flip(m.to_sq(), Piece(PieceToChar.find(move[4])));
-            else
-                pos.reveal_captured(Piece(PieceToChar.find(move[4])));
-        }
-        else if (move.length() == 6)
-        {
-            pos.do_flip(m.to_sq(), Piece(PieceToChar.find(move[4])));
-            pos.reveal_captured(Piece(PieceToChar.find(move[5])));
-        }
+
+        if (moveDark)
+            pos.do_flip(m.to_sq(), flipped);
+
+        if (captured != NO_PIECE)
+            pos.reveal_captured(captured);
     }
 }
 
