@@ -270,6 +270,13 @@ void Position::set_check_info(StateInfo* si) const {
   si->checkSquares[ADVISOR] = attacks_bb<ADVISOR>(oksq, pieces());
   si->checkSquares[BISHOP] = attacks_bb<BISHOP>(oksq, pieces());
   si->checkSquares[KING] = 0;
+  // The remaining slots were never written, but generate<QUIET_CHECKS> reads
+  // check_squares(ADVISOR_B) for face-down advisors (valgrind: conditional jump on an
+  // uninitialised value in generate_moves<..., ADVISOR_B, QUIET_CHECKS>). A face-down
+  // advisor only reaches its own palace centre, so it can never give check.
+  si->checkSquares[NO_PIECE_TYPE] = 0;
+  si->checkSquares[KNIGHT_TO] = 0;
+  si->checkSquares[ADVISOR_B] = 0;
 }
 
 
