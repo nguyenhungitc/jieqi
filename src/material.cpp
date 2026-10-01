@@ -148,8 +148,8 @@ namespace Stockfish {
             const int pieceCount[COLOR_NB][13] = {
             { 0,pos.count<ROOK>(WHITE), pos.count<ADVISOR>(WHITE), pos.count<CANNON>(WHITE),
               pos.count<PAWN>(WHITE), pos.count<KNIGHT>(WHITE), pos.count<BISHOP>(WHITE),
-              pos.darkcount<ROOK>(WHITE), pos.darkcount<ADVISOR>(WHITE), pos.count<CANNON>(WHITE),
-              pos.darkcount<PAWN>(WHITE), pos.count<KNIGHT>(WHITE), pos.count<BISHOP>(WHITE) },
+              pos.darkcount<ROOK>(WHITE), pos.darkcount<ADVISOR>(WHITE), pos.darkcount<CANNON>(WHITE),
+              pos.darkcount<PAWN>(WHITE), pos.darkcount<KNIGHT>(WHITE), pos.darkcount<BISHOP>(WHITE) },
             { 0,pos.count<ROOK>(BLACK), pos.count<ADVISOR>(BLACK), pos.count<CANNON>(BLACK),
               pos.count<PAWN>(BLACK), pos.count<KNIGHT>(BLACK), pos.count<BISHOP>(BLACK),
               pos.darkcount<ROOK>(BLACK), pos.darkcount<ADVISOR>(BLACK), pos.darkcount<CANNON>(BLACK),
