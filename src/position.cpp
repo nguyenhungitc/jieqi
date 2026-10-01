@@ -800,7 +800,9 @@ bool Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
       if (capPiece) {
           const int evgThemOld = restPieces[them].evgValueRaw();
           restPieces[them].pop_back(type_of(capPiece));
-          st->key ^= Zobrist::psqDark[capPiece][restPieces[them].countType(type_of(capPiece))];
+          // st is already the new state here, whose key is overwritten with k below:
+          // the pool change must go into k.
+          k ^= Zobrist::psqDark[capPiece][restPieces[them].countType(type_of(capPiece))];
           reprice_dark(them, evgThemOld);
       }
 
