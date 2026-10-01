@@ -1714,33 +1714,24 @@ Value Search::Worker::flip_search(
         results.push_back({value, num});
     }
 
-    bool all_decisive = true;
-    for (const auto& e : results) {
-        if (!is_decisive(e.value)) {
-            all_decisive = false;
-            break;
-        }
+    // A chance node is only decisive when *every* outcome is decisive for the
+    // same side. If some outcomes win and others lose, the result depends on
+    // the hidden piece and must be averaged like any other mix of outcomes.
+    bool allWin = true, allLoss = true;
+    for (const auto& e : results)
+    {
+        allWin &= is_win(e.value);
+        allLoss &= is_loss(e.value);
     }
 
-    if (all_decisive) {
-        Value best_win_mate  = VALUE_MATE;
-        Value best_loss_mate = -VALUE_MATE;
-
-        for (const auto& e : results) {
-            Value v = e.value;
-            if (is_win(v)) {
-                if (v < best_win_mate)
-                    best_win_mate = v;
-            } else if (is_loss(v)) {
-                if (v > best_loss_mate)
-                    best_loss_mate = v;
-            }
-        }
-
-        if (best_win_mate != VALUE_MATE)
-            return best_win_mate;
-        else
-            return best_loss_mate;
+    if (!results.empty() && (allWin || allLoss))
+    {
+        // All wins: the guaranteed mate is the slowest one (minimum value).
+        // All losses: we are mated at the latest by the slowest one (maximum value).
+        Value v = results[0].value;
+        for (const auto& e : results)
+            v = allWin ? std::min(v, e.value) : std::max(v, e.value);
+        return v;
     }
 
     double winrate_sum = 0.0;
