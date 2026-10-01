@@ -1296,6 +1296,7 @@ moves_loop: // When in check, search starts here
       // Each revealed identity is searched from the same starting depth. The LMR block
       // below adjusts newDepth in place, which used to carry over to the next identity.
       const Depth newDepthBase = newDepth;
+      bool pvSearched = false;   // (ss+1)->pv holds a line for *this* move
       bool fromWhile = false;
       StateInfo darkSt;
       std::string fen3, mvStr = UCI::move(move);
@@ -1470,6 +1471,7 @@ dark_calc:
       {
           (ss+1)->pv = pv;
           (ss+1)->pv[0] = MOVE_NONE;
+          pvSearched = true;
 
           vTmp = -search<PV>(pos, ss+1, -beta, -alpha,
               isDarkDepth ? 0 : std::min(maxNextDepth, newDepth), false);
@@ -1528,16 +1530,12 @@ dark_undo:
               rm.pv.resize(1);
 
 
-              if (!(ss + 1)->pv) {
-                  //printf("pv is null!\n");
-                  (ss + 1)->pv = pv;
-                  ss->pv[0] = MOVE_NONE;
-              }
-
-              assert((ss+1)->pv);
-
-              for (Move* m = (ss+1)->pv; *m != MOVE_NONE; ++m)
-                  rm.pv.push_back(*m);
+              // A flip move can become the best move through ScoreCalc's aggregate
+              // without any PV search of its own; then (ss+1)->pv still holds the line
+              // of another root move (seen: 'i0i2 g4g2' where g4g2 answered i4h6).
+              if (pvSearched && (ss+1)->pv)
+                  for (Move* m = (ss+1)->pv; *m != MOVE_NONE; ++m)
+                      rm.pv.push_back(*m);
 
               // We record how often the best move has been changed in each iteration.
               // This information is used for time management. In MultiPV mode,
