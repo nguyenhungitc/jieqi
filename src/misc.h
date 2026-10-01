@@ -353,13 +353,18 @@ private:
 
 class ScoreCalc {
 public:
-    ScoreCalc(int Ldepth, int depth, bool us) :
-        _Ldepth(Ldepth), _depth(depth), _us(us){}
+    // Scores are given, aggregated and returned from the point of view of the side that
+    // moved the face-down piece (every caller passes vTmp = -search(child)). The 'us'
+    // arguments are kept for source compatibility and ignored: they used to flip the
+    // scores to Position::firstSideMove's point of view, but firstSideMove is never
+    // assigned (always WHITE), so identical chance nodes were scored differently for
+    // Red and Black.
+    ScoreCalc(int Ldepth, int depth, bool /*us*/) :
+        _Ldepth(Ldepth), _depth(depth) {}
 
-    void setUs(bool us) { _us = !us; }
+    void setUs(bool /*us*/) {}
 
-    void append(Piece p, int score, int count) {
-        if (!_us) score *= -1;
+    void append(Piece /*p*/, int score, int count) {
         if (_min > score)_min = score;
         if (_max < score)_max = score;
         score = std::clamp(score, -DARKVALRATE, DARKVALRATE);
@@ -386,13 +391,11 @@ public:
         {
             v = evg;
         }
-        if (!_us) v *= -1;
         assert(v > -VALUE_INFINITE && v < VALUE_INFINITE);
         return Value(v);
     }
 
 private:
-    bool _us;
     int _Ldepth;
     int _depth;
     //int _typeScore[PIECE_NB] = { 0 };
