@@ -730,6 +730,7 @@ bool Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
       restPieces[sideToMove].pop_back(type_of(to_pc));
       st->key ^= Zobrist::psqDark[to_pc][restPieces[sideToMove].countType(type_of(to_pc))];
       put_piece(to_pc,from);
+      st->key ^= Zobrist::psq[darkPc][from] ^ Zobrist::psq[to_pc][from];
       st->materialKey ^= Zobrist::psq[to_pc][pieceCount[to_pc] - 1];
       st->material[sideToMove] += PieceValue[MG][to_pc] - evgOld;
       reprice_dark(sideToMove, evgOld);
