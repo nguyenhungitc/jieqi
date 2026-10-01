@@ -84,6 +84,7 @@ namespace {
         {
             MoveStr.assign(token, 0, token.length() - 1);
             pGet = PieceExchange::charToPiece(token[4]);
+            pCaptured = NO_PIECE; // must not inherit the previous move's captured identity
             assert(pGet <= B_KING);
         }
         else if (token.size() == 6)
@@ -99,6 +100,15 @@ namespace {
             break;
         }
         if ((m = UCI::to_move(pos, MoveStr)) == MOVE_NONE)break;
+        // A face-down piece reveals when it moves, so its move must carry the identity
+        // (5th character). Without it the piece would stay dark off its starting point,
+        // which neither the move generator nor fen()/set() can represent.
+        if (pGet == NO_PIECE && pos.isDark(from_sq(m)))
+        {
+            sync_cout << "info string error: move " << token
+                      << " moves a face-down piece without its revealed identity; ignoring it and the rest of the move list" << sync_endl;
+            break;
+        }
         if (token.size() == 5 && !pos.isDark(from_sq(m)))
         {
             pCaptured = pGet;
