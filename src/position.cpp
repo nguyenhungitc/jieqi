@@ -169,9 +169,23 @@ Position& Position::set(const string& fenStr, StateInfo* si) {
 
         else if ((idx = PieceToChar.find(token)) != string::npos)
         {
+            // Ignore anything that would be placed outside the board
+            if (!is_ok(sq))
+                continue;
+
             if (tolower(token) == 'x')
             {
-                idx = PieceToChar.find(DarkPieces[sq]);
+                // A dark piece moves like the piece that starts on its square,
+                // so it can only stand on a starting square of its own color,
+                // and the king is never hidden.
+                const char start = DarkPieces[sq];
+                if (start == '.' || tolower(start) == 'k'
+                    || bool(isupper(start)) != (token == 'X'))
+                {
+                    ++sq;  // Treat the invalid dark piece as an empty square
+                    continue;
+                }
+                idx = PieceToChar.find(start);
                 byTypeBB[DARK] |= sq;
             }
             put_piece(Piece(idx), sq);
@@ -186,15 +200,20 @@ Position& Position::set(const string& fenStr, StateInfo* si) {
     sideToMove = (token == 'w' ? WHITE : BLACK);
     ss >> token;
 
-    // 3. Rest pieces
+    // 3. Rest pieces: a list of <piece><count>, e.g. R2A2C2P5N2B2r2a2c2p5n2b2.
+    // Only non-king pieces are accepted, counts are single digits.
     while ((ss >> token) && !isspace(token))
     {
-        if ((idx = PieceToChar.find(token)) != string::npos)
-        {
-            Piece pc = Piece(idx);
-            ss >> token;
-            restPieces[pc] = std::clamp(int(token) - '0', 0, MAX_REST_COUNT);
-        }
+        idx = PieceToChar.find(token);
+        if (idx == string::npos || idx == 0 || idx >= size_t(PIECE_NB)
+            || type_of(Piece(idx)) == KING || type_of(Piece(idx)) == NO_PIECE_TYPE)
+            continue;
+
+        if (!(ss >> token) || isspace(token))
+            break;
+
+        if (isdigit(token))
+            restPieces[idx] = std::min(int(token - '0'), MAX_REST_COUNT);
     }
 
     // 4-5. Halfmove clock and fullmove number
@@ -1241,6 +1260,43 @@ void Position::flip() {
     set(f, st);
 
     assert(pos_is_ok());
+}
+
+
+// Checks the pool of unrevealed pieces against the dark pieces on the board:
+// every dark piece must have at least one candidate in its owner's pool, and
+// no kind of piece can exceed its initial number. Positions that fail this
+// check cannot be searched meaningfully (a dark piece could not be revealed).
+bool Position::pool_is_consistent(std::string* reason) const {
+
+    constexpr int MaxCount[PIECE_TYPE_NB] = {0, 2, 2, 2, 5, 2, 2, 0};
+
+    for (Color c : {WHITE, BLACK})
+    {
+        int pool = 0;
+        for (PieceType pt = ROOK; pt < KING; ++pt)
+        {
+            int n = restPieces[make_piece(c, pt)];
+            if (n < 0 || n > MaxCount[pt])
+            {
+                if (reason)
+                    *reason = std::string("too many pieces of kind '")
+                            + PieceToChar[make_piece(c, pt)] + "' in the pool";
+                return false;
+            }
+            pool += n;
+        }
+
+        if (pool < popcount(pieces(c) & pieces(DARK)))
+        {
+            if (reason)
+                *reason = std::string(c == WHITE ? "white" : "black")
+                        + " has more dark pieces on the board than pieces in its pool";
+            return false;
+        }
+    }
+
+    return true;
 }
 
 

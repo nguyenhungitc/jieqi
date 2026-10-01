@@ -1685,7 +1685,12 @@ Value Search::Worker::flip_search(
     for (const auto& [piece, num] : restPieces)
         total += num;
 
-    assert(total != 0);
+    // In a consistent position a dark piece always has a candidate in its
+    // owner's pool. An inconsistent position can only come from the input (it
+    // is reported by Engine::set_position()), so do not assert here, but never
+    // return an out-of-range value.
+    if (total == 0)
+        return VALUE_DRAW;
 
     DirtyPiece dp = accumulatorStack.latest().dirtyPiece;
 

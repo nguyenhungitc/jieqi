@@ -162,6 +162,9 @@ void Engine::set_position(const std::string& fen, const std::vector<std::string>
     states = StateListPtr(new std::deque<StateInfo>(1));
     pos.set(fen, &states->back());
 
+    if (std::string reason; !pos.pool_is_consistent(&reason))
+        sync_cout << "info string Invalid position: " << reason << sync_endl;
+
     for (const auto& move : moves)
     {
         auto m = UCIEngine::to_move(pos, move);
