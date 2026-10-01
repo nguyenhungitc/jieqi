@@ -37,7 +37,11 @@ namespace Stockfish {
 namespace Zobrist {
 
   Key psq[PIECE_NB][SQUARE_NB];
-  Key psqDark[PIECE_NB][5];
+  // One key per (piece, pool count) pair. A pool holds at most 5 of a type, so only
+  // indices 0..4 are ever read, but init() fills 7 per piece: the array must be at
+  // least that large (it was [5], an out-of-bounds write in init()). Keeping the
+  // fill loop as is keeps every Zobrist key bit-identical to upstream.
+  Key psqDark[PIECE_NB][7];
   Key side;
 }
 
