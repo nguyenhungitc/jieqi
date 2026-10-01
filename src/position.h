@@ -72,6 +72,7 @@ struct StateInfo {
   
   uint16_t   chased;
   Move       move;
+  Score      darkPsq;   // chance node only: psq before getDark(), restored by setDark()
   // TODO: 这里可能按需要加一些结构表示和暗子有关的东西
 
   // Used by NNUE
@@ -194,6 +195,8 @@ private:
 
   // Other helpers
   void move_piece(Square from, Square to);
+  Score dark_score(Color c, Square s, int evg) const;
+  void reprice_dark(Color c, int evgOld);
   std::pair<Piece, int> light_do_move(Move m);
   void light_undo_move(Move m, Piece captured, int id = 0);
   void set_chase_info(int d);

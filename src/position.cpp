@@ -564,7 +564,7 @@ bool Position::getDark(StateInfo& newSt, int& typecount, bool& isDarkDepth) {
     Color us = ~sideToMove;
     Piece pc = NO_PIECE;
     typecount = 0;
-    Value darkV = Value(restPieces[us].evgValue());
+    const int evgOld = restPieces[us].evgValueRaw();   // pool average before the reveal
     isDarkDepth = st->darkDepth > MAXDARKDEPTH || st->darkTypes > MAXDARKTYPES;
     if (st->darkDepth - MAXDARKDEPTH > QDARKDEPTH)return false;
     Key poolKey = 0;
@@ -591,6 +591,7 @@ bool Position::getDark(StateInfo& newSt, int& typecount, bool& isDarkDepth) {
     // added to the filter by do_move().
     thisThread->nodes.fetch_add(1, std::memory_order_relaxed);
     Key k = st->key ^ poolKey;
+    st->darkPsq = psq;
     std::memcpy(&newSt, st, offsetof(StateInfo, key));
     newSt.previous = st->previous;
     newSt.previousDark = st;
@@ -614,8 +615,6 @@ bool Position::getDark(StateInfo& newSt, int& typecount, bool& isDarkDepth) {
     Piece old = piece_on(ds);
     assert(color_of(old) == us);
     {
-        st->material[us] += 69;
-
         dp.dirty_num = 2;  // 1 piece moved, 1 piece captured
         dp.piece[0] = old;
         dp.from[0] = ds;
@@ -629,8 +628,20 @@ bool Position::getDark(StateInfo& newSt, int& typecount, bool& isDarkDepth) {
         k ^= Zobrist::psq[old][ds] ^ Zobrist::psq[pc][ds];
     }
     //replcae
+    // psq / material / materialKey. The dark piece is priced at the pool average evgOld
+    // on its starting square (move_piece() does not move a dark piece's psq term). Replace
+    // it by the revealed piece on ds and re-price the other dark pieces of `us`, whose
+    // average changed when pc left the pool. Before this, psq and material[] kept the
+    // dark price (material got a flat +69) and materialKey was not updated at all, so the
+    // material hash returned the imbalance of whichever identity was evaluated first.
+    psq -= dark_score(us, from_sq(st->move), evgOld);
     remove_piece(ds,false);
+    st->materialKey ^= Zobrist::psq[old][pieceCount[old]];
     put_piece(pc, ds, false);
+    st->materialKey ^= Zobrist::psq[pc][pieceCount[pc] - 1];
+    psq += PSQT::psq[pc][ds];
+    st->material[us] += PieceValue[MG][pc] - evgOld;
+    reprice_dark(us, evgOld);
 
 
     // Update the key with the final value
@@ -645,6 +656,31 @@ bool Position::getDark(StateInfo& newSt, int& typecount, bool& isDarkDepth) {
     assert(pos_is_ok());
 
     return true;
+}
+
+/// Position::dark_score() is the psq term of one face-down piece of colour c on s
+/// when its pool averages evg: the term put_piece()/remove_piece() add and remove.
+
+Score Position::dark_score(Color c, Square s, int evg) const {
+    int v = (c == WHITE ? evg : -evg);
+    File f = File(edge_distance(file_of(s)));
+    if (f > FILE_E) --f;
+    return make_score(v, v) + PSQT::psqCap[rank_of(s)][f];
+}
+
+/// Position::reprice_dark() is called after c's pool changed (its average was evgOld).
+/// Every face-down piece of c still on the board is priced at the pool average in psq
+/// and material[], so all of them move by the change of the average. This keeps both
+/// equal to what set() / set_state() compute for the same position.
+
+void Position::reprice_dark(Color c, int evgOld) {
+    int n = 0;
+    for (PieceType pt : { ROOK, ADVISOR, CANNON, PAWN, KNIGHT, BISHOP })
+        n += pieceCount[make_piece(c, pt) ^ 16];
+    int d = n * (restPieces[c].evgValueRaw() - evgOld);
+    st->material[c] += d;
+    int s = (c == WHITE ? d : -d);
+    psq += make_score(s, s);
 }
 
 void Position::setDark() {
@@ -662,6 +698,7 @@ void Position::setDark() {
     //replcae
     remove_piece(st->darkSquare, false);
     put_piece(st->darkPiece, st->darkSquare, false);
+    psq = st->darkPsq;
     //--gamePly;
 
     // getDark() changed neither the chance node's key nor the bloom filter, so there
@@ -684,10 +721,18 @@ bool Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
   Square to = to_sq(m);
   Piece to_pc = get_Piece(m);
   if (to_pc) {
+      // Identity supplied by the GUI: reveal the piece on `from` permanently, in the
+      // current (history) state, before moving it.
+      Piece darkPc = piece_on(from);
+      const int evgOld = restPieces[sideToMove].evgValueRaw();
       remove_piece(from);
+      st->materialKey ^= Zobrist::psq[darkPc][pieceCount[darkPc]];
       restPieces[sideToMove].pop_back(type_of(to_pc));
       st->key ^= Zobrist::psqDark[to_pc][restPieces[sideToMove].countType(type_of(to_pc))];
       put_piece(to_pc,from);
+      st->materialKey ^= Zobrist::psq[to_pc][pieceCount[to_pc] - 1];
+      st->material[sideToMove] += PieceValue[MG][to_pc] - evgOld;
+      reprice_dark(sideToMove, evgOld);
   }
 
   Piece old = piece_on(from);
@@ -736,7 +781,7 @@ bool Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
       
       if (Darkof(captured) == UNKNOWN)
       {
-          st->material[them] -= restPieces[them].evgValue() + 75;
+          st->material[them] -= restPieces[them].evgValue();
       }
       else
       {
@@ -752,8 +797,10 @@ bool Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
       remove_piece(capsq);
       Piece capPiece = cap_Piece(m);
       if (capPiece) {
+          const int evgThemOld = restPieces[them].evgValueRaw();
           restPieces[them].pop_back(type_of(capPiece));
           st->key ^= Zobrist::psqDark[capPiece][restPieces[them].countType(type_of(capPiece))];
+          reprice_dark(them, evgThemOld);
       }
 
       // Update hash key

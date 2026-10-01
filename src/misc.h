@@ -264,6 +264,9 @@ public:
         return p;
     }
 
+    // Same as evgValue() but 0 for an empty pool instead of asserting.
+    int evgValueRaw() const { return _evgValue; }
+
     int evgValue()const {
         assert(this->size_);
         assert(_evgValue < 1500 && _evgValue>0);
