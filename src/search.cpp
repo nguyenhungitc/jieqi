@@ -1293,6 +1293,9 @@ moves_loop: // When in check, search starts here
 
       Value vTmp = value;
       int darkTryTimes = 0;
+      // Each revealed identity is searched from the same starting depth. The LMR block
+      // below adjusts newDepth in place, which used to carry over to the next identity.
+      const Depth newDepthBase = newDepth;
       bool fromWhile = false;
       StateInfo darkSt;
       std::string fen3, mvStr = UCI::move(move);
@@ -1311,6 +1314,7 @@ moves_loop: // When in check, search starts here
           while (pos.getDark(darkSt, typecount, isDarkDepth))
           {
               fromWhile = true;
+              newDepth = newDepthBase;
               goto dark_calc;
 dark_while:              
               tryTypeTimes++;
@@ -1421,7 +1425,7 @@ dark_calc:
 
           vTmp = -search<NonPV>(pos, ss+1, -(alpha+1), -alpha, isDarkDepth ? 0 : d, true);
 
-          if (darkTryTimes == 0 || vTmp < value) value = vTmp;
+          value = vTmp;
           darkTryTimes++;
 
           // Do full depth search when reduced LMR search fails high
@@ -1435,7 +1439,7 @@ dark_calc:
               if (newDepth > d)
                   vTmp = -search<NonPV>(pos, ss+1, -(alpha+1), -alpha, isDarkDepth ? 0 : newDepth, !cutNode);
 
-              if (darkTryTimes == 0 || vTmp < value) value = vTmp;
+              value = vTmp;
 
               darkTryTimes++;
 
@@ -1454,7 +1458,7 @@ dark_calc:
       {
               vTmp = -search<NonPV>(pos, ss+1, -(alpha+1), -alpha, isDarkDepth ? 0 : newDepth, !cutNode);
 
-              if (darkTryTimes == 0 || vTmp < value) value = vTmp;
+              value = vTmp;
 
               darkTryTimes++;
       }
@@ -1470,7 +1474,7 @@ dark_calc:
           vTmp = -search<PV>(pos, ss+1, -beta, -alpha,
               isDarkDepth ? 0 : std::min(maxNextDepth, newDepth), false);
           //get worse
-          if (darkTryTimes == 0 || vTmp < value) value = vTmp;
+          value = vTmp;
           darkTryTimes++;
       }
       if (fromWhile) {
