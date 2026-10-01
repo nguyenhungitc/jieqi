@@ -546,13 +546,15 @@ void Position::undo_flip(Square s, Piece fromPc) {
     Color us = ~sideToMove;
     Piece pc = piece_on(s);
 
+    // Update hash key. This must mirror do_flip(), which toggled the pool slot
+    // of index restPieces[pc] *after* decrementing it, so toggle it *before*
+    // incrementing it back.
+    st->key ^= Zobrist::psq[pc][s] ^ Zobrist::psq[pc][restPieces[pc]];
+
     restPieces[pc]++;
     remove_piece(s);
     put_piece(fromPc, s);
     byTypeBB[DARK] ^= s;
-
-    // Update hash key
-    st->key ^= Zobrist::psq[pc][s] ^ Zobrist::psq[pc][restPieces[pc]];
     // If the moving piece is a pawn, update pawn hash key.
     if (type_of(pc) == PAWN)
         st->pawnKey ^= Zobrist::psq[pc][s];
