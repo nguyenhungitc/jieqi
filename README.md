@@ -4,16 +4,20 @@ This branch is the jieqi (揭棋, xiangqi with face-down pieces) engine from Pik
 `jieqi_old` branch, with a series of correctness fixes on top. It uses a classical
 hand-written evaluation and no neural network.
 
-Every fix addresses a defect that was reproduced and measured:
-
-- [`BUGS.md`](BUGS.md) lists each defect with its evidence, the fixing commit, and the same
-  measurement after the fix.
-- [`evidence/`](evidence/) contains the scripts that regenerate every number.
+Every fix addresses a defect that was reproduced and measured before and after the change.
+Each commit message describes the defect, how it was measured and the effect of the fix. The
+measurement scripts and raw results are not part of this repository.
 
 ## Base
 
 [`official-pikafish/Pikafish`](https://github.com/official-pikafish/Pikafish), branch
-`jieqi_old`, commit `23b9466c`. No other changes are included.
+`jieqi_old`, commit `23b9466c`, imported here as `d95db86` ("Initial commit"). The import
+leaves the engine source unchanged. It differs from upstream only in that:
+
+- `src/position.cpp`, `src/uci.cpp`, `Copying.txt` and `NNUE-License.txt` use LF line endings;
+- the CI workflow (`.github/workflows/pikafish.yml`) and the empty `Pikafish` submodule
+  entry are removed;
+- `tests/*.sh` are no longer marked executable (run them with `bash tests/<script>.sh`).
 
 ## Commits
 
@@ -21,23 +25,25 @@ One commit per defect, in order:
 
 | Commit | Change |
 |---|---|
-| `f6cec51c` | `Zobrist::psqDark` sized for the keys `init()` writes (out-of-bounds write; keys unchanged) |
-| `db44750c` | Material imbalance counts Red's dark cannons, knights and bishops as dark |
-| `7afa0b47` | UCI `position`: `pCaptured` reset per move; a dark move without an identity is rejected |
-| `e5d4d71a` | FEN: a pool count without a piece letter is ignored |
-| `20f20c8c` | `set_check_info`: every `checkSquares` slot initialised |
-| `cbfd1078` | `getDark`/`setDark`: canonical keys, no bloom-filter writes, revealed state initialised |
-| `d1f5f5e1` | `materialKey`, `material[]` and `psq` stay equal to `set()` when an identity is fixed |
-| `1e506eb5` | GUI reveal: the face-down piece is removed from the key |
-| `2a1dfbc4` | `ScoreCalc`: same aggregation for Red and Black (mover's point of view) |
-| `975d6bbc` | No false mate scores at the dark-depth limit (fallback to static evaluation) |
-| `543563dd` | A move's value is its last (re-)search; `newDepth` is reset per identity |
-| `bc5003fe` | The root PV only takes the line of the move it belongs to |
-| `807111db` | GUI capture: the pool change goes into the new key |
+| `f837f6a1` | `Zobrist::psqDark` sized for the keys `init()` writes (out-of-bounds write; keys unchanged) |
+| `8cb9b63d` | Material imbalance counts Red's dark cannons, knights and bishops as dark |
+| `331ffe3e` | UCI `position`: `pCaptured` reset per move; a dark move without an identity is rejected |
+| `e0f88e45` | FEN: a pool count without a piece letter is ignored |
+| `4a7d2a78` | `set_check_info`: every `checkSquares` slot initialised |
+| `d0aa3751` | `getDark`/`setDark`: canonical keys, no bloom-filter writes, revealed state initialised |
+| `dabc00ff` | `materialKey`, `material[]` and `psq` stay equal to `set()` when an identity is fixed |
+| `1df88ed9` | GUI reveal: the face-down piece is removed from the key |
+| `82d16c5b` | `ScoreCalc`: same aggregation for Red and Black (mover's point of view) |
+| `1ed94c09` | No false mate scores at the dark-depth limit (fallback to static evaluation) |
+| `684fac7f` | A move's value is its last (re-)search; `newDepth` is reset per identity |
+| `03d9dbc2` | The root PV only takes the line of the move it belongs to |
+| `057ccfd3` | GUI capture: the pool change goes into the new key |
 
 ## Headline results
 
-Base vs head, on 32 self-play positions:
+Base (upstream `23b9466c`) vs head (this branch). Counters were taken on 32 self-play
+positions at 400k nodes each, using an instrumented build that compares the incremental
+state with a from-scratch recomputation. The scripts are not included here.
 
 | Check | Base | Head |
 |---|---|---|
@@ -67,11 +73,13 @@ Base vs head, on 32 self-play positions:
 
 ## Known open issues
 
-Both are verified and documented in [`BUGS.md`](BUGS.md):
+Both were verified but are not fixed:
 
 - **The evaluation is not colour-symmetric** because of `PSQT::psqCap`: at the symmetric start
   position it gives +1.35 / −2.60 pawns for Red. Fixing this requires re-tuning the table.
-- **`ScoreCalc` averages per-identity results** that may be bounds of different kinds.
+- **`ScoreCalc` averages per-identity results** that may be bounds of different kinds
+  (upper, lower or exact). An average of mixed bounds is not a bound. Fixing this is a
+  design change (for example Star1/Star2-style windows at chance nodes).
 
 ## Build
 
