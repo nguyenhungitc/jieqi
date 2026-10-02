@@ -1,118 +1,175 @@
-<div align="center">
-
-  [![Pikafish][pikafish-logo]][website-link]
-
-
-  <h3>Pikafish</h3>
-
-  A free and strong UCI xiangqi engine.
-  <br>
-  <strong>[Explore Pikafish docs »][wiki-link]</strong>
-  <br>
-  <br>
-  [Report bug][issue-link]
-  ·
-  [Open a discussion][discussions-link]
-  ·
-  [Discord][discord-link]
-  ·
-  [Blog][website-blog-link]
-
-  [![Build][build-badge]][build-link]
-  [![License][license-badge]][license-link]
-  [![RuleBook][rulebook-badge]][rulebook-link]
-  <br>
-  [![Release][release-badge]][release-link]
-  [![Commits][commits-badge]][commits-link]
-  <br>
-  [![Website][website-badge]][website-link]
-  [![Fishtest][fishtest-badge]][fishtest-link]
-  [![Discord][discord-badge]][discord-link]
-
-</div>
-
 ## Overview
 
-[Pikafish][website-link] is a **free and strong UCI xiangqi engine** derived from
-[Stockfish][stockfish-link] that analyzes xiangqi positions and computes the optimal moves.
+This branch adapts Pikafish, a free UCI xiangqi engine derived
+from Stockfish, to **Jieqi**: a xiangqi variant in which all
+pieces except the kings start face down and are revealed when they first move.
 
-Pikafish **does not include a graphical user interface** (GUI) that is required
-to display a chessboard and to make it easy to input moves. These GUIs are
-developed independently from Pikafish and are available online. **Read the
-documentation for your GUI** of choice for information about how to use
-Pikafish with it.
+The branch shares the search framework, NNUE architecture and UCI interface of
+Pikafish, and adds:
 
-See also the Pikafish [documentation][wiki-usage-link] for further usage help.
+* a board representation for hidden ("dark") pieces and for the pool of pieces
+  that have not been revealed yet;
+* chance nodes in the search: a move of a dark piece is evaluated over every
+  piece it can turn out to be, weighted by how many of each are left;
+* an NNUE feature set with features for dark pieces and for the contents of the
+  pool;
+* extensions of the FEN and UCI move notation to describe hidden pieces and
+  reveals (see [UCI protocol](#uci-protocol)).
 
-## Files
+Like Pikafish, this engine **does not include a graphical user interface**. It
+needs a GUI or another program that knows the Jieqi rules and the notation
+described below, and that tells the engine which piece was revealed after each
+reveal.
 
-This distribution of Pikafish consists of the following files:
+> [!IMPORTANT]
+> This branch needs a **Jieqi network**. The default xiangqi network published
+> at `master-net` is **not compatible** (it uses a different feature set), see
+> [Network](#network).
 
-  * [README.md][readme-link], the file you are currently reading.
+## Rules implemented
 
-  * [Copying.txt][license-link], a text file containing the GNU General Public
-    License version 3.
+* At the start, the 15 non-king pieces of each side stand face down on the usual
+  xiangqi starting squares, shuffled. Kings are never hidden.
+* A dark piece moves like the xiangqi piece whose starting square it occupies
+  (a dark piece on a rook square moves like a rook, and so on). A dark advisor
+  must stay in the palace.
+* Moving a dark piece reveals it. A dark piece is therefore always on its
+  starting square.
+* Revealed pieces move as in xiangqi, except that revealed advisors may leave
+  the palace and revealed bishops may cross the river. A revealed pawn that has
+  not crossed the river (including one revealed on its back rank) only moves
+  forward.
+* Kings, checks, the flying-general rule, and the repetition rules (perpetual
+  check and chase) are those of Pikafish.
+* A game is drawn after 40 moves (80 plies) without a capture. Reveals do not
+  reset this counter.
 
-  * [AUTHORS][authors-link], a text file with the list of authors for the official Pikafish project.
+## UCI protocol
 
-  * [src][src-link], a subdirectory containing the full source code, including a
-    Makefile that can be used to compile Pikafish on Unix-like systems.
+The engine speaks UCI with the following additions.
 
-  * a file with the .nnue extension, storing the neural network for the NNUE
-    evaluation.
+### FEN
 
-## Contributing
+```
+xxxxkxxxx/9/1x5x1/x1x1x1x1x/9/9/X1X1X1X1X/1X5X1/9/XXXXKXXXX w R2A2C2P5N2B2r2a2c2p5n2b2 0 1
+```
 
-__See [Contributing Guide](./CONTRIBUTING.md).__
+* Board: the usual xiangqi FEN letters (`R A C P N B K`, uppercase for the side
+  moving first, lowercase for the other side), plus `X` / `x` for a dark piece
+  of either side. A dark piece is only accepted on a starting square of its own
+  side other than the king's; anything else is ignored.
+* Side to move: `w` or `b`.
+* **Pool**: for each kind of piece, the number of pieces of that kind that are
+  still unknown, as `<letter><digit>` pairs, e.g. `R2A2C2P5N2B2r2a2c2p5n2b2`.
+  The pool also contains captured dark pieces whose identity was never
+  reported. Each side needs at least as many pieces in its pool as it has dark
+  pieces on the board; otherwise the engine prints
+  `info string Invalid position: ...`.
+* No-capture counter in plies, and the move number.
 
-### Donating hardware
+`position startpos` uses the FEN above.
 
-Improving Pikafish requires a massive amount of testing. You can donate your
-hardware resources by installing the [Fishtest Worker][worker-link] and viewing
-the current tests on [Fishtest][fishtest-link].
+### Moves
 
-### Improving the code
+Moves use coordinate notation (`a3a4`), files `a`–`i`, ranks `0`–`9` from the
+first player's side. Moves sent to the engine carry extra letters for revealed
+pieces:
 
-In the [chessprogramming wiki][programming-link], many techniques used in
-Pikafish are explained with a lot of background information.
-The [section on Stockfish][programmingsf-link] describes many features
-and techniques used by Stockfish. However, it is generic rather than
-focused on Stockfish's precise implementation.
+| Situation | Format | Example |
+|---|---|---|
+| Move of a revealed piece or a king | `<from><to>` | `e0e1` |
+| A dark piece is moved: the revealed piece is **required** | `<from><to><piece>` | `a3a4P` |
+| A revealed piece captures a dark piece: its identity is **optional** | `<from><to><captured>` | `b9d9a` |
+| Both | `<from><to><piece><captured>` | `b2b9Cn` |
 
-The engine testing is done on [Fishtest][fishtest-link].
-If you want to help improve Pikafish, please read this [guideline][guideline-link]
-first, where the basics of Pikafish development are explained.
+The revealed piece is written with the case of the moving side, the captured
+piece with the case of the captured side. The piece must still be in the
+corresponding pool. The identity of a captured dark piece is optional because
+the owner of that piece may not be told what it was.
 
-Discussions about Pikafish take place these days mainly in the Pikafish
-[Discord server][discord-link]. This is also the best place to ask questions
-about the codebase and how to improve it.
+If a move is illegal or its letters are invalid, the engine prints
+`info string Invalid move ...` and ignores that move and all following ones.
 
+Examples:
 
-## Compiling Pikafish
+```
+position startpos moves a3a4P
+position startpos moves b2b9Cn a9b9r
+position startpos moves b2b9Cn a6a5p b9d9a
+```
 
-Pikafish has support for 32 or 64-bit CPUs, certain hardware instructions,
-big-endian machines such as Power PC, and other platforms.
+In the second line, the dark piece on b2 (moving like a cannon) captures the
+dark piece on b9, is revealed as a cannon, and the captured piece was a knight;
+then the dark piece on a9 captures that cannon and is revealed as a rook.
 
-On Unix-like systems, it should be easy to compile Pikafish directly from the
-source code with the included Makefile in the folder `src`. In general, it is
-recommended to run `make help` to see a list of make targets with corresponding
-descriptions.
+### Engine output
+
+* `bestmove` is always a plain coordinate move. When it moves a dark piece, the
+  GUI must reveal the piece and send it back in the next `position` command.
+* A PV in `info` lines stops after the first move of a dark piece, because the
+  continuation depends on the piece that will be revealed.
+* No `ponder` move is given when the best move reveals a piece.
+* Scores of moves that reveal pieces are expected values over the possible
+  outcomes. A mate score is only reported when every outcome leads to mate.
+
+### Debugging commands
+
+`d` prints the board (`X` / `x` for dark pieces), the FEN and the hash key.
+`go perft <depth>` counts leaf nodes; a move of a dark piece is expanded into
+one child per kind of piece left in the mover's pool (each kind counted once).
+
+## Network
+
+The network file is set with the `EvalFile` option (default `pikafish.nnue`,
+looked up next to the binary and in the working directory).
+
+This branch uses its own feature set (`HalfKAv2_hm` with dark-piece and pool
+features, feature hash `0x0d17b100`). Networks trained for Pikafish master
+(xiangqi), including the one published as `master-net`, use a different feature
+set and are rejected when loaded; the engine then prints an error and exits at
+the first `go`. The error message still points to the `master-net` download;
+it does not mean that this network would work.
+
+## Compiling
+
+On Unix-like systems, use the Makefile in `src`:
 
 ```
 cd src
-make -j profile-build
+make -j build
 ```
 
-Detailed compilation instructions for all platforms can be found in our
-[documentation][wiki-compile-link]. Our wiki also has information about
-the [UCI commands][wiki-uci-link] supported by Pikafish.
+Run `make help` for the list of targets and architectures.
+
+Every build target first runs `make net`, which downloads the xiangqi
+`master-net` network into `src/pikafish.nnue` **if that file does not exist**.
+That network is not compatible with this branch (see [Network](#network)), so
+put a Jieqi network at `src/pikafish.nnue` before building, or point the
+`EvalFile` option to one at run time.
+
+`make profile-build` also runs a benchmark to collect profile data, which needs
+a compatible network.
+
+## Contributing
+
+See the [Contributing Guide](./CONTRIBUTING.md). Changes to the search or
+evaluation should be validated by testing against the current version of this
+branch, as for Pikafish.
+
+Useful checks when changing Jieqi-specific code:
+
+* build with `make -j build debug=yes sanitize="address undefined"` and run
+  searches from positions with dark pieces;
+* compare `go perft` counts before and after changes to move generation or to
+  `Position`;
+* compare the key printed by `d` for the same position reached through
+  `position startpos moves ...` and set directly with `position fen ...`; they
+  must be equal.
 
 ## Terms of use
 
-### GNU General Public License version 3
-
 Pikafish is free and distributed under the
-[**GNU General Public License version 3**][license-link] (GPL v3). Essentially,
+**GNU General Public License version 3**(GPL v3). Essentially,
 this means you are free to do almost exactly what you want with the program,
 including distributing it among your friends, making it available for download
 from your website, selling it (either by itself or as part of some bigger
@@ -127,42 +184,6 @@ also be made available under GPL v3.
 
 ## Acknowledgements
 
-Pikafish uses neural networks trained on [data provided by the Pika Xiangqi Zero
-project][px0-data-link], which is made available under the [Open Database License][odbl-link] (ODbL).
-
-[authors-link]:			https://github.com/official-pikafish/Pikafish/blob/master/AUTHORS
-[build-badge]:			https://img.shields.io/github/actions/workflow/status/official-pikafish/Pikafish/pikafish.yml?branch=master&style=for-the-badge&label=pikafish&logo=github
-[build-link]:				https://github.com/official-pikafish/Pikafish/actions/workflows/pikafish.yml
-[commits-badge]:		https://img.shields.io/github/commits-since/official-pikafish/Pikafish/latest?style=for-the-badge
-[commits-link]:			https://github.com/official-pikafish/Pikafish/commits/master
-[discord-badge]:			https://img.shields.io/discord/1013130558089478144?style=for-the-badge&label=discord&logo=Discord
-[discord-link]:			https://discord.com/invite/uSb3RXb7cY
-[discussions-link]:   https://github.com/official-pikafish/Pikafish/discussions/new
-[fishtest-badge]:			https://img.shields.io/website?style=for-the-badge&down_color=red&down_message=Offline&label=Fishtest&up_color=success&up_message=Online&url=https://test.pikafish.org
-[fishtest-link]:			https://test.pikafish.org
-[guideline-link]:			https://github.com/glinscott/fishtest/wiki/Creating-my-first-test
-[issue-link]:         https://github.com/official-pikafish/Pikafish/issues/new?assignees=&labels=&template=BUG-REPORT.yml
-[license-badge]:			https://img.shields.io/github/license/official-pikafish/Pikafish?style=for-the-badge&label=license&color=success
-[license-link]:			https://github.com/official-pikafish/Pikafish/blob/master/Copying.txt
-[pikafish-logo]:			https://pikafish.org/assets/logo_256.png
-[programming-link]:		https://www.chessprogramming.org/Main_Page
-[programmingsf-link]:	https://www.chessprogramming.org/Stockfish
-[qqgroup-link]:			https://jq.qq.com/?_wv=1027&k=FORWUh4W
-[readme-link]:			https://github.com/official-pikafish/Pikafish/blob/master/README.md
-[release-badge]:			https://img.shields.io/github/v/release/official-pikafish/Pikafish?style=for-the-badge&label=official%20release
-[release-link]:			https://github.com/official-pikafish/Pikafish/releases/latest
-[rulebook-badge]:		https://img.shields.io/badge/computer%20rule-20B2AA?style=for-the-badge&logo=mdbook
-[rulebook-link]:			https://pikafish.org/rule.html
-[src-link]:				https://github.com/official-pikafish/Pikafish/tree/master/src
-[stockfish-link]:			https://github.com/official-stockfish/Stockfish
-[uci-link]:				https://backscattering.de/chess/uci/
-[website-badge]:		https://img.shields.io/website?style=for-the-badge&down_color=red&down_message=Offline&label=website&up_color=success&up_message=Online&url=https://pikafish.org
-[website-link]:			https://pikafish.org
-[website-blog-link]:  https://pikafish.org/
-[wiki-link]:          https://github.com/official-pikafish/Pikafish/wiki
-[wiki-compile-link]:  https://github.com/official-pikafish/Pikafish/wiki/Compiling-from-source
-[wiki-uci-link]:      https://github.com/official-pikafish/Pikafish/wiki/UCI-&-Commands
-[wiki-usage-link]:    https://github.com/official-pikafish/Pikafish/wiki/Download-and-usage
-[worker-link]:			https://github.com/xyztnecniV/yolo
-[px0-data-link]:      https://www.kaggle.com/datasets/pikacat/px0data
-[odbl-link]:          https://opendatacommons.org/licenses/odbl/odbl-10.txt
+Pikafish is derived from Stockfish. Pikafish networks are
+trained on data provided by the Pika Xiangqi Zero project,
+which is made available under the Open Database License(ODbL).
