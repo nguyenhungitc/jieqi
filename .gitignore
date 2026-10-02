@@ -1,6 +1,8 @@
 # Files from build
 **/*.o
 **/*.s
+# '**/*.s' also matches '.S' on case-insensitive file systems (Windows, macOS)
+!src/external/decompress/huf_decompress_amd64.S
 src/.depend
 
 # Files from Qt

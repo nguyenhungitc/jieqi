@@ -1,18 +1,41 @@
 #!/usr/bin/env bash
-# Reproduction script for the issues described in BUGS.md.
+# Reproduction script for the Jieqi bugs fixed after the initial commit of this
+# repository. The initial commit ("Initial commit", the root of the history)
+# contains the code as imported from the 'jieqi' branch of Pikafish; the
+# following commits fix these issues:
 #
-# Build four binaries from trees prepared with apply_test_harness.py:
-#   original tree (9b963f7) and tree with the fix series applied,
-#   each in release and in debug+sanitizer mode:
+#   B1   dangling StateInfo in SearchManager::pv()
+#   B2   a mix of winning and losing reveal outcomes reported as a forced result
+#   B3   Position::undo_flip() does not restore the hash key
+#   B4   Zobrist keys of the pool of unrevealed pieces collide with piece keys
+#   B5   hash key depends on how a position was set up
+#   B6   empty pool with dark pieces on the board ('score mate 0', assertion)
+#   B7   FEN parsing writes out of bounds
+#   B8   reveal letters in 'position ... moves' are not validated
+#   B9   perft reads uninitialized StateInfo fields
+#   B10  fail-soft bounds averaged as exact values in flip_search() (still open;
+#        only statistics are printed, for the original tree)
+#   B11  'if' instead of 'else if' in Position::chased() (no functional change,
+#        not checked here)
+#
+# Build four binaries, from two trees prepared with apply_test_harness.py, each
+# in release and in debug+sanitizer mode:
+#
+#   original tree: the initial commit, e.g.
+#       git worktree add ../jieqi-original $(git rev-list --max-parents=0 HEAD)
+#     The initial commit lacks src/external/decompress/huf_decompress_amd64.S,
+#     which is needed to link on x86-64: copy it from the current tree first.
+#   fixed tree: the current tree.
 #
 #     make -j build ARCH=x86-64-sse41-popcnt
 #     make -j build ARCH=x86-64-sse41-popcnt debug=yes sanitize="address undefined"
 #
 # Then run:
-#   ORIG_REL=... ORIG_DBG=... FIXED_REL=... FIXED_DBG=... ./repro.sh
+#   ORIG_REL=... ORIG_DBG=... FIXED_REL=... FIXED_DBG=... tests/repro.sh
 #
 # Any binary can be left out; the corresponding runs are skipped.
 # Searches use the material evaluation of the test harness, not NNUE.
+# expected_output.txt is the output of a complete run.
 
 set -u
 export ASAN_OPTIONS=handle_abort=1

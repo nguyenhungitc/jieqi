@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """TEST ONLY - never commit the result.
 
-Prepares a copy of the Pikafish 'jieqi' source tree for the reproduction
-script (repro.sh). Works on the original branch (9b963f7) and on the tree
-with the fix series applied.
+Prepares a copy of the source tree of this repository for the reproduction
+script (repro.sh). Works on the original tree (the initial commit of this
+repository, as imported from the 'jieqi' branch of Pikafish) and on the
+current tree, which contains the fixes.
 
 Changes made to <src>:
   1. nnue/network.cpp : skip the network check (no public Jieqi network).

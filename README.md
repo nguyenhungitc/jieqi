@@ -1,10 +1,10 @@
 ## Overview
 
-This branch adapts Pikafish, a free UCI xiangqi engine derived
+This project adapts Pikafish, a free UCI xiangqi engine derived
 from Stockfish, to **Jieqi**: a xiangqi variant in which all
 pieces except the kings start face down and are revealed when they first move.
 
-The branch shares the search framework, NNUE architecture and UCI interface of
+The project shares the search framework, NNUE architecture and UCI interface of
 Pikafish, and adds:
 
 * a board representation for hidden ("dark") pieces and for the pool of pieces
@@ -22,7 +22,7 @@ described below, and that tells the engine which piece was revealed after each
 reveal.
 
 > [!IMPORTANT]
-> This branch needs a **Jieqi network**. The default xiangqi network published
+> This engine needs a **Jieqi network**. The default xiangqi network published
 > at `master-net` is **not compatible** (it uses a different feature set), see
 > [Network](#network).
 
@@ -123,7 +123,7 @@ one child per kind of piece left in the mover's pool (each kind counted once).
 The network file is set with the `EvalFile` option (default `pikafish.nnue`,
 looked up next to the binary and in the working directory).
 
-This branch uses its own feature set (`HalfKAv2_hm` with dark-piece and pool
+This engine uses its own feature set (`HalfKAv2_hm` with dark-piece and pool
 features, feature hash `0x0d17b100`). Networks trained for Pikafish master
 (xiangqi), including the one published as `master-net`, use a different feature
 set and are rejected when loaded; the engine then prints an error and exits at
@@ -143,7 +143,7 @@ Run `make help` for the list of targets and architectures.
 
 Every build target first runs `make net`, which downloads the xiangqi
 `master-net` network into `src/pikafish.nnue` **if that file does not exist**.
-That network is not compatible with this branch (see [Network](#network)), so
+That network is not compatible with this engine (see [Network](#network)), so
 put a Jieqi network at `src/pikafish.nnue` before building, or point the
 `EvalFile` option to one at run time.
 
@@ -154,7 +154,7 @@ a compatible network.
 
 See the [Contributing Guide](./CONTRIBUTING.md). Changes to the search or
 evaluation should be validated by testing against the current version of this
-branch, as for Pikafish.
+project, as for Pikafish.
 
 Useful checks when changing Jieqi-specific code:
 
@@ -169,7 +169,7 @@ Useful checks when changing Jieqi-specific code:
 ## Terms of use
 
 Pikafish is free and distributed under the
-**GNU General Public License version 3**(GPL v3). Essentially,
+[**GNU General Public License version 3**](./Copying.txt) (GPL v3). Essentially,
 this means you are free to do almost exactly what you want with the program,
 including distributing it among your friends, making it available for download
 from your website, selling it (either by itself or as part of some bigger
@@ -184,6 +184,10 @@ also be made available under GPL v3.
 
 ## Acknowledgements
 
-Pikafish is derived from Stockfish. Pikafish networks are
-trained on data provided by the Pika Xiangqi Zero project,
-which is made available under the Open Database License(ODbL).
+This project is based on the `jieqi` branch of
+[Pikafish](https://github.com/official-pikafish/Pikafish), which is derived from
+[Stockfish](https://github.com/official-stockfish/Stockfish). Pikafish networks
+are trained on
+[data provided by the Pika Xiangqi Zero project](https://www.kaggle.com/datasets/pikacat/px0data),
+which is made available under the
+[Open Database License](https://opendatacommons.org/licenses/odbl/odbl-10.txt) (ODbL).
