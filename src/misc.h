@@ -367,6 +367,7 @@ public:
     void append(Piece /*p*/, int score, int count) {
         if (_min > score)_min = score;
         if (_max < score)_max = score;
+        if (score < VALUE_MATE_IN_MAX_PLY && _maxNoMate < score) _maxNoMate = score;
         score = std::clamp(score, -DARKVALRATE, DARKVALRATE);
         _totalScore += score * count;
         _totalCount += count;
@@ -381,7 +382,11 @@ public:
         }
         else if(evg == DARKVALRATE)
         {
-            v = _max;
+            // Every identity scores at least DARKVALRATE. The mover does not choose the
+            // identity, so a mate is only forced if every identity mates, and then only
+            // in as many plies as the slowest one. Taking _max claimed a mate when a
+            // single identity mated, and the fastest mate when all of them did.
+            v = _min >= VALUE_MATE_IN_MAX_PLY ? _min : _maxNoMate;
         }        
         else if (evg == -DARKVALRATE)
         {
@@ -405,6 +410,7 @@ private:
     //int _types = 0;
     int _min = 99999999;
     int _max = -99999999;
+    int _maxNoMate = -99999999;   // best score that is not a mate score
 };
 
 
