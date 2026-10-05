@@ -169,7 +169,6 @@ public:
   Key material_key() const;
 
   // Other properties of the position
-  bool isFirstSide() const;
   Color side_to_move() const;
   int game_ply() const;
   Thread* this_thread() const;
@@ -212,7 +211,6 @@ private:
   StateInfo* st;
   int gamePly;
   Color sideToMove;
-  Color firstSideMove;
   Score psq;
 
   // Bloom filter for fast repetition filtering
@@ -226,9 +224,6 @@ private:
 
 extern std::ostream& operator<<(std::ostream& os, const Position& pos);
 
-inline bool Position::isFirstSide() const {
-    return sideToMove == firstSideMove;
-}
 inline Color Position::side_to_move() const {
   return sideToMove;
 }

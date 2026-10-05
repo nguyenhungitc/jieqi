@@ -320,31 +320,6 @@ public:
         
     }
 
-    void shuffle() { 
-        static int seed = 52808;
-        PRNG rng(seed);
-        seed = rng.rand<int>();
-
-        int maxIndex = this->size_ - 1;
-        memset(typeNum, 0, sizeof(int) * PIECE_TYPE_NB);
-        for (int i = 0; i < PIECE_TYPE_NB; i++)
-        {
-            typePos[i].clear();
-        }
-        for (int i = 0; i < maxIndex; i++)
-        {
-            int p = abs(rng.rand<int>()) % (maxIndex - i) + 1 + i;
-            RestListTmp<Piece, 15>::swap(i, p);
-            PieceType t = type_of(RestListTmp<Piece, 15>::at(i));
-            typePos[t].push_back(i);
-            typeNum[t]++;
-        }
-        PieceType t = type_of(RestListTmp<Piece, 15>::at(maxIndex));
-        typePos[t].push_back(maxIndex);
-        typeNum[t]++;
-    }
-
-
 private:
     int typeNum[PIECE_TYPE_NB] = { 0 };
     RestListTmp<int, 5> typePos[PIECE_TYPE_NB];
@@ -355,15 +330,7 @@ private:
 class ScoreCalc {
 public:
     // Scores are given, aggregated and returned from the point of view of the side that
-    // moved the face-down piece (every caller passes vTmp = -search(child)). The 'us'
-    // arguments are kept for source compatibility and ignored: they used to flip the
-    // scores to Position::firstSideMove's point of view, but firstSideMove is never
-    // assigned (always WHITE), so identical chance nodes were scored differently for
-    // Red and Black.
-    ScoreCalc(int Ldepth, int depth, bool /*us*/) :
-        _Ldepth(Ldepth), _depth(depth) {}
-
-    void setUs(bool /*us*/) {}
+    // moved the face-down piece (every caller passes vTmp = -search(child)).
 
     void append(Piece /*p*/, int score, int count) {
         if (_min > score)_min = score;
@@ -402,13 +369,8 @@ public:
     }
 
 private:
-    int _Ldepth;
-    int _depth;
-    //int _typeScore[PIECE_NB] = { 0 };
-    //int _typecount[PIECE_NB] = { 0 };
     int _totalScore = 0;
     int _totalCount = 0;
-    //int _types = 0;
     int _min = 99999999;
     int _max = -99999999;
     int _maxNoMate = -99999999;   // best score that is not a mate score

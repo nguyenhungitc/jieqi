@@ -581,37 +581,9 @@ namespace {
     constexpr bool PvNode = nodeType != NonPV;
     constexpr bool rootNode = nodeType == Root;
     const Depth maxNextDepth = rootNode ? depth : depth + 1;
-#if SEARCHDEBUG
-    std::string debugFen = std::to_string(depth);
-    debugFen.append(",");
-    debugFen.append(pos.fen());
-    bool debugPrint = false;
-    bool darkPrint = false;
-    if (!Limits.watchmoves.size())
-        debugPrint = false;
-    else if (Limits.watchmoves.size() == 1)
-        debugPrint = (depth == Limits.depth && rootNode);
-    else if (depth == Limits.depth - Limits.watchmoves.size() + 1) {
-    //else {
-        debugPrint = true;
-        for (int wi = 1; wi < Limits.watchmoves.size(); wi++)
-        {
-            if (UCI::move((ss - wi)->currentMove) != Limits.watchmoves.at(Limits.watchmoves.size() - wi))
-            {
-                debugPrint = false;
-                break;
-            }
-        }
-    }
-#endif
     // Dive into quiescence search when the depth reaches zero
     if (depth <= 0) {
         Value qv = qsearch<PvNode ? PV : NonPV>(pos, ss, alpha, beta);
-#if SEARCHDEBUG
-        if (debugPrint) {
-            sync_cout << "[" << __LINE__ << "]" << debugFen << " " << qv << " "<<pos.key()  << sync_endl;
-        }
-#endif
         return qv;
     }
         
@@ -657,21 +629,11 @@ namespace {
         Value result;
         if (pos.is_repeated(result, ss->ply)) {
             result = result == VALUE_DRAW ? value_draw(pos.this_thread()) : result;
-#if SEARCHDEBUG
-            if (debugPrint) {
-                sync_cout << "[" << __LINE__ << "]" << debugFen << " " << result << sync_endl;
-            }
-#endif
             return result;
         }
 
         if (Threads.stop.load(std::memory_order_relaxed) || ss->ply >= MAX_PLY) {
             result = (ss->ply >= MAX_PLY && !ss->inCheck) ? evaluate(pos) : value_draw(pos.this_thread());
-#if SEARCHDEBUG
-            if (debugPrint) {
-                sync_cout << "[" << __LINE__ << "]" << debugFen << " " << result << sync_endl;
-            }
-#endif
             return result;
         }
             
@@ -686,11 +648,6 @@ namespace {
         beta = std::min(mate_in(ss->ply+1), beta);
         if (alpha >= beta)
         {
-#if SEARCHDEBUG
-            if (debugPrint) {
-                sync_cout << "[" << __LINE__ << "]" << debugFen << " " << alpha << sync_endl;
-            }
-#endif
             return alpha;
         }
             
@@ -756,11 +713,6 @@ namespace {
                 update_continuation_histories(ss, pos.moved_piece(ttMove), to_sq(ttMove), penalty);
             }
         }
-#if SEARCHDEBUG
-        if (debugPrint) {
-            sync_cout << "[" << __LINE__ << "]" << debugFen << " " << ttValue << sync_endl;
-        }
-#endif
         return ttValue;
     }
 
@@ -826,11 +778,6 @@ namespace {
     {
         value = qsearch<NonPV>(pos, ss, alpha - 1, alpha);
         if (value < alpha) {
-#if SEARCHDEBUG
-            if (debugPrint) {
-                sync_cout << "[" << __LINE__ << "]" << debugFen << " " << value << sync_endl;
-            }
-#endif
             return value;
         }
             
@@ -877,11 +824,6 @@ namespace {
                 nullValue = beta;
 
             if (thisThread->nmpMinPly || (abs(beta) < VALUE_KNOWN_WIN && depth < 14)){
-#if SEARCHDEBUG
-                if (debugPrint) {
-                    sync_cout << "[" << __LINE__ << "]" << debugFen << " " << nullValue << sync_endl;
-                }
-#endif
                 return nullValue;
             }
 
@@ -897,11 +839,6 @@ namespace {
             thisThread->nmpMinPly = 0;
 
             if (v >= beta) {
-#if SEARCHDEBUG
-            if (debugPrint) {
-                sync_cout << "[" << __LINE__ << "]" << debugFen << " " << nullValue << sync_endl;
-            }
-#endif
                 return nullValue;
             }
         }
@@ -944,7 +881,7 @@ namespace {
                     
                     int tryTypeTimes = 0, typecount = 0;
                     bool isDarkDepth;
-                    ScoreCalc SC(Limits.depth, depth, pos.isFirstSide());
+                    ScoreCalc SC;
                     while (pos.getDark(darkSt, typecount, isDarkDepth))
                     {
                         Value vTmp;
@@ -988,11 +925,6 @@ namespace {
                 {
                     // Save ProbCut data into transposition table
                     tte->save(posKey, value_to_tt(value, ss->ply), ss->ttPv, BOUND_LOWER, depth - 3, move, ss->staticEval);
-#if SEARCHDEBUG
-                    if (debugPrint) {
-                        sync_cout << "[" << __LINE__ << "]" << debugFen << " " << value << sync_endl;
-                    }
-#endif
                     return value;
                 }
             }
@@ -1011,11 +943,6 @@ namespace {
         
     if (depth <= 0){
         value = qsearch<PV>(pos, ss, alpha, beta);
-#if SEARCHDEBUG
-        if (debugPrint) {
-            sync_cout << "[" << __LINE__ << "]" << debugFen << " " << value << sync_endl;
-        }
-#endif
         return value;
     }
 
@@ -1038,11 +965,6 @@ moves_loop: // When in check, search starts here
         && abs(ttValue) <= VALUE_KNOWN_WIN
         && abs(beta) <= VALUE_KNOWN_WIN
         ) {
-#if SEARCHDEBUG
-        if (debugPrint) {
-            sync_cout << "[" << __LINE__ << "]" << debugFen << " " << probCutBeta << sync_endl;
-        }
-#endif
         return probCutBeta;
         }
         
@@ -1076,34 +998,6 @@ moves_loop: // When in check, search starts here
     {
       assert(is_ok(move));
 
-#if SEARCHDEBUG
-      if (depth == Limits.depth - Limits.watchmoves.size() + 2 && Limits.watchmoves.size() > 1) {
-          darkPrint = true;
-          if (UCI::move(move) != Limits.watchmoves.at(Limits.watchmoves.size() - 1)) {
-              darkPrint = false;
-          }
-          else
-          {
-              for (int wi = 1; wi < Limits.watchmoves.size() - 2; wi++)
-              {
-                  if (UCI::move((ss - wi)->currentMove) != Limits.watchmoves.at(Limits.watchmoves.size() - wi - 1))
-                  {
-                      darkPrint = false;
-                      break;
-                  }
-              }
-          }
-
-
-      }
-      else
-      {
-          darkPrint = false;
-      }
-      if (darkPrint) {
-          int a = 0;
-      }
-#endif
       if (move == excludedMove)
           continue;
 
@@ -1245,11 +1139,6 @@ moves_loop: // When in check, search starts here
               // that multiple moves fail high, and we can prune the whole subtree by returning
               // a soft bound.
               else if (singularBeta >= beta) {
-#if SEARCHDEBUG
-                  if (debugPrint) {
-                      sync_cout << "[" << __LINE__ << "]" << debugFen << " " << singularBeta << sync_endl;
-                  }
-#endif
                   return singularBeta;
               }
                   
@@ -1299,19 +1188,10 @@ moves_loop: // When in check, search starts here
       bool pvSearched = false;   // (ss+1)->pv holds a line for *this* move
       bool fromWhile = false;
       StateInfo darkSt;
-      std::string fen3, mvStr = UCI::move(move);
       int tryTypeTimes = 0, typecount = 0;
-      ScoreCalc SC(Limits.depth, depth, pos.isFirstSide());
+      ScoreCalc SC;
       bool isDarkDepth = false;
-#if SEARCHDEBUG
-      fen3 = pos.fen();
-      std::string DarkSearchInfo = "";
-#endif
-      if (mvStr == "g4g9") {
-          int a = 0;
-      }
       if (pos.do_move(move, st, givesCheck)) {
-          SC.setUs(pos.isFirstSide());
           while (pos.getDark(darkSt, typecount, isDarkDepth))
           {
               fromWhile = true;
@@ -1320,18 +1200,6 @@ moves_loop: // When in check, search starts here
 dark_while:              
               tryTypeTimes++;
               SC.append(pos.piece_on(to_sq(move)), vTmp, typecount);
-#if SEARCHDEBUG
-              if (darkPrint) {
-                  if (!DarkSearchInfo.empty())DarkSearchInfo.append(",");
-                  DarkSearchInfo.append(std::to_string(pos.piece_on(to_sq(move))));
-                  DarkSearchInfo.append(" ");
-                  DarkSearchInfo.append(std::to_string(vTmp));
-                  DarkSearchInfo.append(" ");
-                  DarkSearchInfo.append(std::to_string(typecount));
-                  DarkSearchInfo.append(" ");
-              }
-
-#endif
               pos.setDark();
           }
           fromWhile = false;
@@ -1350,13 +1218,6 @@ dark_while:
           else
           {
               value = SC.CalcEvg();
-#if SEARCHDEBUG
-              if (darkPrint) {
-                  DarkSearchInfo.append("----evg:");
-                  DarkSearchInfo.append(std::to_string(value));
-                  DarkSearchInfo.append(" ");
-              }
-#endif 
               goto dark_undo;
           }
       }
@@ -1488,15 +1349,6 @@ dark_undo:
       pos.undo_move(move);
 
 
-#if SEARCHDEBUG
-      if (debugPrint) {
-          sync_cout << "move[" << __LINE__ << "]" << debugFen << " " << UCI::move(move) << " " << value << " " << pos.piece_on(to_sq(move)) << sync_endl;
-      }
-      if (darkPrint) {
-          if (!DarkSearchInfo.empty())
-              sync_cout << "dark[" << __LINE__ << "]d=" << depth<<"," << DarkSearchInfo << sync_endl;
-      }
-#endif
 
       assert(value > -VALUE_INFINITE && value < VALUE_INFINITE);
 
@@ -1506,11 +1358,6 @@ dark_undo:
       // updating best move, PV and TT.
       if (Threads.stop.load(std::memory_order_relaxed))
       {
-#if SEARCHDEBUG
-          if (debugPrint) {
-              sync_cout << "move[" << __LINE__ << "]" << debugFen << " " << UCI::move(move) << " " << VALUE_ZERO << " " << pos.piece_on(to_sq(move)) << sync_endl;
-          }
-#endif
           return VALUE_ZERO;
       }
           
@@ -1649,11 +1496,6 @@ dark_undo:
                   depth, bestMove, ss->staticEval);
 
     assert(bestValue > -VALUE_INFINITE && bestValue < VALUE_INFINITE);
-#if SEARCHDEBUG
-    if (debugPrint) {
-        sync_cout << "move[" << __LINE__ << "]" << debugFen << " " << UCI::move(move) << " " << bestValue << " " << pos.piece_on(to_sq(move)) << sync_endl;
-    }
-#endif
     return bestValue;
   }
 
@@ -1857,12 +1699,11 @@ dark_undo:
       // Make and search the move
       Value vTmp;
       int tryTypeTimes = 0, typecount = 0;
-      ScoreCalc SC(Limits.depth, depth, pos.isFirstSide());
+      ScoreCalc SC;
       bool isDarkDepth;
       std::string cfen;
       if (pos.do_move(move, st, givesCheck)) {
           StateInfo darkSt;
-          SC.setUs(pos.isFirstSide());
           while (pos.getDark(darkSt, typecount, isDarkDepth))
           {
               // Not 'isDarkDepth ? 0 : depth - 1' as in search(): there 0 means "drop

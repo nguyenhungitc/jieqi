@@ -27,7 +27,6 @@
 
 namespace Stockfish {
 
-#define SEARCHDEBUG 0
 
 class Position;
 
@@ -96,9 +95,6 @@ struct LimitsType {
   }
 
   std::vector<Move> searchmoves, banmoves;
-#if SEARCHDEBUG
-  std::vector<std::string> watchmoves;
-#endif
   TimePoint time[COLOR_NB], inc[COLOR_NB], npmsec, movetime, startTime;
   int movestogo, depth, mate, perft, infinite;
   int64_t nodes;

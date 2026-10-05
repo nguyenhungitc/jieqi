@@ -160,9 +160,7 @@ namespace {
   template<Tracing T> template<Color Us>
   void Evaluation<T>::initialize() {
 
-    constexpr Color     Them = ~Us;
     const Square ksq = pos.square<KING>(Us);
-    constexpr Bitboard LowRanks = (Us == WHITE ? Rank0BB | Rank1BB : Rank8BB | Rank9BB); 
 
    
     // Initialize attackedBy[] for king and pawns
@@ -185,8 +183,6 @@ namespace {
         DarkPieces[WHITE][ALL_PIECES] |= DarkPieces[WHITE][i];
         DarkPieces[BLACK][ALL_PIECES] |= DarkPieces[BLACK][i];
     }
-    // Find our pawns that are on the first two ranks
-    Bitboard b0 = pos.pieces(Us, PAWN) & LowRanks;
 
   }
 
@@ -529,8 +525,6 @@ std::string Eval::trace(Position& pos) {
 
           if (pc != NO_PIECE && type_of(pc) != KING)
           {
-              auto st = pos.state();
-
               pos.remove_piece(sq);
               Score score = pos.psq_score();
               Value eval = (mg_value(score) * (pos.count<ALL_PIECES>() * 1000 / 32) + eg_value(score) * (1000 - pos.count<ALL_PIECES>() * 1000 / 32)) / 1000;

@@ -156,7 +156,7 @@ Position& Position::set(const string& fenStr, StateInfo* si, Thread* th) {
       incremented after Black's move.
 */
 
-  unsigned char token,lastToken;
+  unsigned char token;
   size_t idx;
   Square sq = SQ_A9;
   std::istringstream ss(fenStr);
@@ -218,10 +218,8 @@ Position& Position::set(const string& fenStr, StateInfo* si, Thread* th) {
   Piece pt = NO_PIECE;
   restPieces[WHITE].clear();
   restPieces[BLACK].clear();
-  lastToken = ' ';
   for (unsigned char c : poolField) {
       token = c;
-      lastToken = token;
       if ((idx = PieceToChar.find(token)) != string::npos && token != ' ') {
           if (token == 'x' || token == 'X')
               pt = NO_PIECE;
@@ -239,7 +237,6 @@ Position& Position::set(const string& fenStr, StateInfo* si, Thread* th) {
           for (int i = 0; i < token - '0'; i++)
               if (rl.countType(type_of(pt)) < InitialCount[type_of(pt)] && rl.size() < 15)
                   rl.push_back(pt);
-          lastToken = ' ';
       }
   }
   for (size_t i = 0; i < putPieces.size(); i++)
@@ -661,7 +658,6 @@ bool Position::gives_check(Move m, PieceType flipped) {
       // Identity unknown: skip the direct-check test, but the discovered / screen
       // checks below do not depend on the identity.
       pt = flipped ? flipped : NO_PIECE_TYPE;
-      //pt = type_of(restPieces[sideToMove].peek());
   }
   else
   {

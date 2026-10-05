@@ -832,7 +832,7 @@ clean: objclean profileclean
 
 # clean binaries and objects
 objclean:
-	@rm -f pikafish pikafish.exe *.o
+	@rm -f $(EXE) *.o
 
 # clean auxiliary profiling files
 profileclean:
