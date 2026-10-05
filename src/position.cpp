@@ -735,26 +735,12 @@ bool Position::getDark(StateInfo& newSt, int& typecount, bool& isDarkDepth) {
     st = &newSt;
     //++gamePly;
     //++st->pliesFromNull;
-    st->accumulator.computed[WHITE] = false;
-    st->accumulator.computed[BLACK] = false;
-    auto& dp = st->dirtyPiece;
     Color them = ~us;
 
     Piece old = piece_on(ds);
     assert(color_of(old) == us);
-    {
-        dp.dirty_num = 2;  // 1 piece moved, 1 piece captured
-        dp.piece[0] = old;
-        dp.from[0] = ds;
-        dp.to[0] = SQ_NONE;
-
-        dp.piece[1] = pc;
-        dp.from[1] = SQ_NONE;
-        dp.to[1] = ds;
-
-        // Update hash key
-        k ^= Zobrist::psq[old][ds] ^ Zobrist::psq[pc][ds];
-    }
+    // Update hash key
+    k ^= Zobrist::psq[old][ds] ^ Zobrist::psq[pc][ds];
     //replcae
     // psq / material / materialKey. The dark piece is priced at the pool average evgOld
     // on its starting square (move_piece() does not move a dark piece's psq term). Replace
@@ -888,12 +874,6 @@ bool Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
   ++gamePly;
   ++st->pliesFromNull;
 
-  // Used by NNUE
-  st->accumulator.computed[WHITE] = false;
-  st->accumulator.computed[BLACK] = false;
-  auto& dp = st->dirtyPiece;
-  dp.dirty_num = 1;
-
   Color us = sideToMove;
   Color them = ~us;
 
@@ -921,11 +901,6 @@ bool Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
           st->material[them] -= PieceValue[MG][captured];
       }
 
-      dp.dirty_num = 2;  // 1 piece moved, 1 piece captured
-      dp.piece[1] = captured;
-      dp.from[1] = capsq;
-      dp.to[1] = SQ_NONE;
-
       // Update board and piece lists
       remove_piece(capsq);
       Piece capPiece = cap_Piece(m);
@@ -946,14 +921,10 @@ bool Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
       st->materialKey ^= Zobrist::psq[captured][pieceCount[captured]];
       prefetch(thisThread->materialTable[st->materialKey]);
   }
-    // Update hash key
-    k ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][to];
+  // Update hash key
+  k ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][to];
 
-    // Move the piece.
-    dp.piece[0] = pc;
-    dp.from[0] = from;
-    dp.to[0] = to;
-  
+  // Move the piece.
   move_piece(from, to);
 
   // Set capture piece
@@ -1040,15 +1011,11 @@ void Position::do_null_move(StateInfo& newSt) {
   // Update the bloom filter
   ++filter[st->key];
 
-  std::memcpy(&newSt, st, offsetof(StateInfo, accumulator));
+  std::memcpy(&newSt, st, sizeof(StateInfo));
 
   newSt.previous = st;
   st = &newSt;
 
-  st->dirtyPiece.dirty_num = 0;
-  st->dirtyPiece.piece[0] = NO_PIECE; // Avoid checks in UpdateAccumulator()
-  st->accumulator.computed[WHITE] = false;
-  st->accumulator.computed[BLACK] = false;
 
   st->key ^= Zobrist::side;
   prefetch(TT.first_entry(key()));
@@ -1558,7 +1525,6 @@ bool Position::pos_is_ok() const {
               assert(0 && "pos_is_ok: Bitboards");
 
   StateInfo si = *st;
-  ASSERT_ALIGNED(&si, Eval::NNUE::CacheLineSize);
 
   set_state(&si);
   if (std::memcmp(&si, st, sizeof(StateInfo)))

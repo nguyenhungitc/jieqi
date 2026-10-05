@@ -20,7 +20,6 @@
 #define EVALUATE_H_INCLUDED
 
 #include <string>
-#include <optional>
 
 #include "types.h"
 
@@ -32,27 +31,6 @@ namespace Eval {
 
   std::string trace(Position& pos);
   Value evaluate(const Position& pos, int* complexity = nullptr);
-
-  extern std::string currentEvalFileName;
-
-  // The default net name MUST follow the format nn-[SHA256 first 12 digits].nnue
-  // for the build process (profile-build and fishtest) to work. Do not change the
-  // name of the macro, as it is used in the Makefile.
-  #define EvalFileDefaultName   "pikafish.nnue"
-
-  namespace NNUE {
-
-    std::string trace(Position& pos);
-    Value evaluate(const Position& pos, int* complexity = nullptr);
-
-    void init();
-    void verify();
-
-    bool load_eval(std::string name, std::istream& stream);
-    bool save_eval(std::ostream& stream);
-    bool save_eval(const std::optional<std::string>& filename);
-
-  } // namespace NNUE
 
 } // namespace Eval
 

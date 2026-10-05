@@ -196,8 +196,6 @@ namespace {
     Position p;
     p.set(pos.fen(), &states->back(), Threads.main());
 
-    Eval::NNUE::verify();
-
     sync_cout << "\n" << Eval::trace(p) << sync_endl;
   }
 
@@ -406,14 +404,6 @@ void UCI::loop(int argc, char* argv[]) {
       }
       else if (token == "eval")     trace_eval(pos);
       else if (token == "compiler") sync_cout << compiler_info() << sync_endl;
-      else if (token == "export_net")
-      {
-          std::optional<std::string> filename;
-          std::string f;
-          if (is >> skipws >> f)
-              filename = f;
-          Eval::NNUE::save_eval(filename);
-      }
       else if (token == "--help" || token == "help" || token == "--license" || token == "license")
           sync_cout << "\nPikafish is a powerful xiangqi engine for playing and analyzing."
                        "\nIt is released as free software licensed under the GNU GPLv3 License."

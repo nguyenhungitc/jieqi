@@ -20,6 +20,7 @@
 #define POSITION_H_INCLUDED
 
 #include <cassert>
+#include <cstring> // For std::memcpy
 #include <deque>
 #include <memory> // For std::unique_ptr
 #include <string>
@@ -28,10 +29,10 @@
 #include <stdlib.h>
 #include <time.h>
 #include "bitboard.h"
+#include "misc.h"
 #include "psqt.h"
 #include "types.h"
 
-#include "nnue/nnue_accumulator.h"
 
 namespace Stockfish {
 
@@ -73,10 +74,6 @@ struct StateInfo {
   Move       move;
   Score      darkPsq;   // chance node only: psq before getDark(), restored by setDark()
   // TODO: 这里可能按需要加一些结构表示和暗子有关的东西
-
-  // Used by NNUE
-  Eval::NNUE::Accumulator accumulator;
-  DirtyPiece dirtyPiece;
 };
 
 
@@ -186,7 +183,6 @@ public:
   bool pos_is_ok() const;
   void flip();
 
-  // Used by NNUE
   StateInfo* state() const;
 
   void put_piece(Piece pc, Square s, bool updatepsq = true);

@@ -14,7 +14,7 @@ measurement scripts and raw results are not part of this repository.
 `jieqi_old`, commit `23b9466c`, imported here as `d95db86` ("Initial commit"). The import
 leaves the engine source unchanged. It differs from upstream only in that:
 
-- `src/position.cpp`, `src/uci.cpp`, `Copying.txt` and `NNUE-License.txt` use LF line endings;
+- `src/position.cpp`, `src/uci.cpp` and `Copying.txt` use LF line endings;
 - the CI workflow (`.github/workflows/pikafish.yml`) and the empty `Pikafish` submodule
   entry are removed;
 - `tests/*.sh` are no longer marked executable (run them with `bash tests/<script>.sh`).

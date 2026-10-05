@@ -61,7 +61,6 @@
 #define ALIGNAS_ON_STACK_VARIABLES_BROKEN
 #endif
 
-#define ASSERT_ALIGNED(ptr, alignment) assert(reinterpret_cast<uintptr_t>(ptr) % alignment == 0)
 
 #if defined(_WIN64) && defined(_MSC_VER) // No Makefile used
 #  include <intrin.h> // Microsoft header for _BitScanForward64()
@@ -103,7 +102,6 @@ constexpr bool Is64Bit = true;
 constexpr bool Is64Bit = false;
 #endif
 
-#define USE_NNUEEVAL 0
 constexpr int DARKVALRATE = 2862;//5000-10000
 constexpr int DARKMAXDIFF = 4812;//500-5000
 
@@ -392,21 +390,6 @@ enum File : int {
 
 enum Rank : int {
   RANK_0, RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RANK_7, RANK_8, RANK_9, RANK_NB
-};
-
-// Keep track of what a move changes on the board (used by NNUE)
-struct DirtyPiece {
-
-  // Number of changed pieces
-  int dirty_num;
-
-  // Max 3 pieces can change in one move. A capture moves the captured
-  // piece to SQ_NONE and the piece to the capture square with promotion.
-  Piece piece[3];
-
-  // From and to squares, which may be SQ_NONE
-  Square from[3];
-  Square to[3];
 };
 
 /// Score enum stores a middlegame and an endgame value in a single integer (enum).

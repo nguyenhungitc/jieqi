@@ -34,64 +34,6 @@ using namespace std;
 
 namespace Stockfish {
 
-namespace Eval {
-
-  string currentEvalFileName = "None";
-
-  /// NNUE::init() tries to load a NNUE network at startup time, or when the engine
-  /// receives a UCI command "setoption name EvalFile value .*.nnue"
-  /// The name of the NNUE network is always retrieved from the EvalFile option.
-  /// We search the given network in two locations: in the active working directory and
-  /// in the engine directory.
-
-  void NNUE::init() {
-
-    string eval_file = string(Options["EvalFile"]);
-    if (eval_file.empty())
-        eval_file = EvalFileDefaultName;
-
-    vector<string> dirs = { "" , CommandLine::binaryDirectory };
-
-    for (string directory : dirs)
-        if (currentEvalFileName != eval_file)
-        {
-            ifstream stream(directory + eval_file, ios::binary);
-            stringstream ss = read_zipped_nnue(directory + eval_file);
-            if (load_eval(eval_file, stream) || load_eval(eval_file, ss))
-                currentEvalFileName = eval_file;
-        }
-  }
-
-  /// NNUE::verify() verifies that the last net used was loaded successfully
-  void NNUE::verify() {
-#if USE_NNUEEVAL 
-    string eval_file = string(Options["EvalFile"]);
-    if (eval_file.empty())
-        eval_file = EvalFileDefaultName;
-
-    if (currentEvalFileName != eval_file)
-    {
-
-        string msg1 = "Network evaluation parameters compatible with the engine must be available.";
-        string msg2 = "The network file " + eval_file + " was not loaded successfully.";
-        string msg3 = "The UCI option EvalFile might need to specify the full path, including the directory name, to the network file.";
-        string msg4 = "The engine will be terminated now.";
-
-        sync_cout << "info string ERROR: " << msg1 << sync_endl;
-        sync_cout << "info string ERROR: " << msg2 << sync_endl;
-        sync_cout << "info string ERROR: " << msg3 << sync_endl;
-        sync_cout << "info string ERROR: " << msg4 << sync_endl;
-
-        exit(EXIT_FAILURE);
-    }
-
-    sync_cout << "info string NNUE evaluation using " << eval_file << " enabled" << sync_endl;
-#else
-      return;
-#endif
-  }
-}
-
 namespace Trace {
 
     enum Tracing { NO_TRACE, TRACE };
@@ -490,24 +432,6 @@ namespace {
 /// evaluation of the position from the point of view of the side to move.
 
 Value Eval::evaluate(const Position& pos, int* complexity) {
-#if USE_NNUEEVAL     
-  int nnueComplexity;
-  Value v = NNUE::evaluate(pos, &nnueComplexity);
-  // Blend nnue complexity with material complexity
-  nnueComplexity = (90 * nnueComplexity + 121 * abs(v - pos.material_diff())) / 256;
-  if (complexity) // Return hybrid NNUE complexity to caller
-      *complexity = nnueComplexity;
-
-  int scale = 1035 + 126 * pos.material_sum() / 4214;
-  Value optimism = pos.this_thread()->optimism[pos.side_to_move()];
-  optimism = optimism * (281 + nnueComplexity) / 256;
-  v = (v * scale + optimism * (scale - 780)) / 1024;
-
-  // Guarantee evaluation does not hit the mate range
-  v = std::clamp(v, VALUE_MATED_IN_MAX_PLY + 1, VALUE_MATE_IN_MAX_PLY - 1);
-
-  return v;
-#else
     Value v = Evaluation<NO_TRACE>(pos).value();
     // Material complexity, the same quantity search() derives on a TT hit
     // (abs(staticEval - material_diff())). Returning 0 here made null-move pruning,
@@ -515,7 +439,6 @@ Value Eval::evaluate(const Position& pos, int* complexity) {
     if (complexity)
         *complexity = abs(v - pos.material_diff());
     return v;
-#endif
 
 }
 

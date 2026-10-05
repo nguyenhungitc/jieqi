@@ -58,13 +58,10 @@ endif
 ### Source and object files
 SRCS = benchmark.cpp bitboard.cpp evaluate.cpp main.cpp material.cpp \
 	misc.cpp movegen.cpp movepick.cpp position.cpp psqt.cpp \
-	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp \
-	nnue/evaluate_nnue.cpp nnue/features/half_ka_v2_hm.cpp \
-	compression/zip.cpp
+	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
-VPATH = compression:nnue:nnue/features
 
 ### ==========================================================================
 ### Section 2. High-level Configuration
@@ -799,14 +796,14 @@ else
 endif
 
 
-.PHONY: help build profile-build strip install clean net objclean profileclean \
+.PHONY: help build profile-build strip install clean objclean profileclean \
         config-sanity icc-profile-use icc-profile-make gcc-profile-use gcc-profile-make \
         clang-profile-use clang-profile-make
 
-build: net config-sanity
+build: config-sanity
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) all
 
-profile-build: net config-sanity objclean profileclean
+profile-build: config-sanity objclean profileclean
 	@echo ""
 	@echo "Step 1/4. Building instrumented executable ..."
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) $(profile_make)
@@ -835,12 +832,12 @@ clean: objclean profileclean
 
 # clean binaries and objects
 objclean:
-	@rm -f pikafish pikafish.exe *.o ./compression/*.o ./nnue/*.o ./nnue/features/*.o
+	@rm -f pikafish pikafish.exe *.o
 
 # clean auxiliary profiling files
 profileclean:
 	@rm -rf profdir
-	@rm -f bench.txt *.gcda *.gcno ./compression/*.gcda ./nnue/*.gcda ./nnue/features/*.gcda *.s
+	@rm -f bench.txt *.gcda *.gcno *.s
 	@rm -f pikafish.profdata *.profraw
 	@rm -f pikafish.*args*
 	@rm -f pikafish.*lt*
@@ -856,7 +853,7 @@ default:
 
 all: $(EXE) .depend
 
-config-sanity: net
+config-sanity:
 	@echo ""
 	@echo "Config:"
 	@echo "debug: '$(debug)'"

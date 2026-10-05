@@ -19,8 +19,10 @@
 #ifndef MISC_H_INCLUDED
 #define MISC_H_INCLUDED
 
+#include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <iostream> // sync_cout
 #include <ostream>
 #include <string>
 #include <vector>
@@ -39,7 +41,6 @@ void* std_aligned_alloc(size_t alignment, size_t size);
 void std_aligned_free(void* ptr);
 void* aligned_large_pages_alloc(size_t size); // memory aligned by page size, min alignment: 4096 bytes
 void aligned_large_pages_free(void* mem); // nop if mem == nullptr
-std::stringstream read_zipped_nnue(const std::string& fpath);
 
 void dbg_hit_on(bool b);
 void dbg_hit_on(bool c, bool b);
