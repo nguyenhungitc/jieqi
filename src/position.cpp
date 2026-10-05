@@ -314,7 +314,8 @@ bool Position::fen_is_valid(const string& fenStr, string& err) {
           if (type_of(pc) == KING)
           {
               kings[color_of(pc)]++;
-              if (!(Palace & s)) { err = "king outside the palace on " + UCI::square(s); return false; }
+              // Palace holds both palaces: a king in the other side's palace passed.
+              if (!(Palace & HalfBB[color_of(pc)] & s)) { err = "king outside its own palace on " + UCI::square(s); return false; }
           }
           else
               light[color_of(pc)][type_of(pc)]++;
