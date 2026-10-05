@@ -70,7 +70,6 @@ struct StateInfo {
   int        darkTypeIndex;
   
   
-  uint16_t   chased;
   Move       move;
   Score      darkPsq;   // chance node only: psq before getDark(), restored by setDark()
   // TODO: 这里可能按需要加一些结构表示和暗子有关的东西
@@ -104,6 +103,10 @@ public:
 
   // FEN string input/output
   Position& set(const std::string& fenStr, StateInfo* si, Thread* th);
+  // Strict check of a jieqi FEN (board, side to move, pools, optional counters).
+  // set() assumes a valid FEN; callers that take FENs from outside (UCI) must call
+  // this first. On failure 'err' says why.
+  static bool fen_is_valid(const std::string& fenStr, std::string& err);
   Position& set(const Position& pos, StateInfo* si, Thread* th);
   std::string fen() const;
 
@@ -116,6 +119,7 @@ public:
   Bitboard pieces(Color c, PieceType pt1, PieceType pt2, PieceType pt3) const;
   Piece piece_on(Square s) const;
   int value_on(Square s) const;
+  int pool_count(Color c, PieceType pt) const { return restPieces[c].countType(pt); }
   Piece nodarkPiece_on(Square s) const;
   bool isDark(Square s) const;
   Dark Darkof(Square s)const;
@@ -199,7 +203,7 @@ private:
   void reprice_dark(Color c, int evgOld);
   std::pair<Piece, int> light_do_move(Move m);
   void light_undo_move(Move m, Piece captured, int id = 0);
-  void set_chase_info(int d);
+  void set_chase_info(int d, uint16_t* chase);
   bool chase_legal(Move m, Bitboard b) const;
 
   // Data members

@@ -50,11 +50,87 @@ namespace {
   // the initial position ("startpos") and then makes the moves given in the following
   // move list ("moves").
 
+  // parse_move() turns one token of a "position ... moves" list into a move, with the
+  // identities that the GUI supplies:
+  //   - a move of a face-down piece must carry its revealed identity as 5th
+  //     character, and may carry the identity of a captured face-down piece as 6th;
+  //   - a move of a face-up piece may carry the identity of a captured face-down
+  //     piece as 5th character.
+  // 'x' or 'X' as captured identity means "unknown". Every identity is checked
+  // against the position: it used to be applied blindly, which let a face-up rook
+  // turn into a knight, gave Red a black piece or a second king, emptied the pool of
+  // the wrong side, or put a key into the state that differs from set(fen()).
+  // Returns MOVE_NONE and sets 'err' when the token cannot be applied.
+
+  Move parse_move(const Position& pos, const string& token, PieceType& flipped, string& err) {
+
+    flipped = NO_PIECE_TYPE;
+    if (token.size() < 4 || token.size() > 6) { err = "expected 4 to 6 characters"; return MOVE_NONE; }
+
+    string str = token.substr(0, 4);
+    Move m = UCI::to_move(pos, str);
+    if (m == MOVE_NONE) { err = "not a legal move in this position"; return MOVE_NONE; }
+
+    Square from = from_sq(m), to = to_sq(m);
+    Color us = pos.side_to_move();
+    Piece target = pos.piece_on(to);
+    Piece pGet = NO_PIECE, pCaptured = NO_PIECE;
+    char capChar = 0;
+
+    if (pos.isDark(from))
+    {
+        // A face-down piece reveals when it moves, so its move must carry the identity.
+        // Without it the piece would stay dark off its starting point, which neither
+        // the move generator nor fen()/set() can represent.
+        if (token.size() < 5) { err = "moves a face-down piece without its revealed identity"; return MOVE_NONE; }
+        pGet = PieceExchange::charToPiece(token[4]);
+        if (pGet == NO_PIECE) { err = string("invalid revealed identity '") + token[4] + "'"; return MOVE_NONE; }
+        if (color_of(pGet) != us) { err = "revealed identity has the wrong colour"; return MOVE_NONE; }
+        if (type_of(pGet) == KING) { err = "a face-down piece cannot be a king"; return MOVE_NONE; }
+        if (!pos.pool_count(us, type_of(pGet))) { err = string("no face-down '") + token[4] + "' left in the pool"; return MOVE_NONE; }
+        if (token.size() == 6)
+            capChar = token[5];
+        flipped = type_of(pGet);
+    }
+    else
+    {
+        if (token.size() == 6) { err = "a face-up piece takes at most one identity character (the captured piece)"; return MOVE_NONE; }
+        if (token.size() == 5)
+            capChar = token[4];
+    }
+
+    if (capChar && capChar != 'x' && capChar != 'X')
+    {
+        pCaptured = PieceExchange::charToPiece(capChar);
+        if (pCaptured == NO_PIECE) { err = string("invalid captured identity '") + capChar + "'"; return MOVE_NONE; }
+        if (target == NO_PIECE) { err = "captured identity given for a move that captures nothing"; return MOVE_NONE; }
+        if (!pos.isDark(to))
+        {
+            // Redundant for a face-up piece; accepted only if it is the piece itself.
+            if (pCaptured != target) { err = "captured identity does not match the face-up piece on " + UCI::square(to); return MOVE_NONE; }
+            pCaptured = NO_PIECE;
+        }
+        else
+        {
+            if (color_of(pCaptured) != ~us) { err = "captured identity has the wrong colour"; return MOVE_NONE; }
+            if (type_of(pCaptured) == KING) { err = "a face-down piece cannot be a king"; return MOVE_NONE; }
+            if (!pos.pool_count(~us, type_of(pCaptured))) { err = string("no face-down '") + capChar + "' left in the opponent's pool"; return MOVE_NONE; }
+        }
+    }
+
+    return make_move(m, pGet, pCaptured);
+  }
+
+
+  // position() is called when the engine receives the "position" UCI command.
+  // It sets up the position that is described in the given FEN string ("fen") or
+  // the initial position ("startpos") and then makes the moves given in the following
+  // move list ("moves"). An invalid FEN leaves the current position unchanged; an
+  // invalid move stops the move list there. Both are reported with "info string".
+
   void position(Position& pos, istringstream& is, StateListPtr& states) {
 
-    Move m;
-    string token, fen, MoveStr;
-    Piece pGet = NO_PIECE, pCaptured = NO_PIECE;
+    string token, fen;
 
     is >> token;
 
@@ -64,8 +140,17 @@ namespace {
         is >> token; // Consume the "moves" token, if any
     }
     else if (token == "fen")
+    {
         while (is >> token && token != "moves")
             fen += token + " ";
+
+        string err;
+        if (!Position::fen_is_valid(fen, err))
+        {
+            sync_cout << "info string error: invalid FEN (" << err << "); position not changed" << sync_endl;
+            return;
+        }
+    }
     else
         return;
 
@@ -75,47 +160,17 @@ namespace {
     // Parse the move list, if any
     while (is >> token)
     {
-        if (token.size() == 4) {
-            MoveStr = token;
-            pGet = NO_PIECE;
-            pCaptured = NO_PIECE;
-        }
-        else if (token.size() == 5)
+        string err;
+        PieceType flipped;
+        Move m = parse_move(pos, token, flipped, err);
+        if (m == MOVE_NONE)
         {
-            MoveStr.assign(token, 0, token.length() - 1);
-            pGet = PieceExchange::charToPiece(token[4]);
-            pCaptured = NO_PIECE; // must not inherit the previous move's captured identity
-            assert(pGet <= B_KING);
-        }
-        else if (token.size() == 6)
-        {
-            MoveStr.assign(token, 0, token.length() - 2);
-            pGet = PieceExchange::charToPiece(token[4]);
-            pCaptured = PieceExchange::charToPiece(token[5]);
-            assert(pGet <= B_KING);
-            assert(pCaptured <= B_KING);
-        }
-        else
-        {
+            sync_cout << "info string error: move " << token << ": " << err
+                      << "; ignoring it and the rest of the move list" << sync_endl;
             break;
-        }
-        if ((m = UCI::to_move(pos, MoveStr)) == MOVE_NONE)break;
-        // A face-down piece reveals when it moves, so its move must carry the identity
-        // (5th character). Without it the piece would stay dark off its starting point,
-        // which neither the move generator nor fen()/set() can represent.
-        if (pGet == NO_PIECE && pos.isDark(from_sq(m)))
-        {
-            sync_cout << "info string error: move " << token
-                      << " moves a face-down piece without its revealed identity; ignoring it and the rest of the move list" << sync_endl;
-            break;
-        }
-        if (token.size() == 5 && !pos.isDark(from_sq(m)))
-        {
-            pCaptured = pGet;
-            pGet = NO_PIECE;
         }
         states->emplace_back();
-        pos.do_move_temp(make_move(m, pGet, pCaptured), states->back(), type_of(pGet));
+        pos.do_move_temp(m, states->back(), flipped);
     }
   }
 

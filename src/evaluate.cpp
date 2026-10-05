@@ -228,7 +228,6 @@ namespace {
     attackedBy[Us][PAWN] = pawn_attacks_bb<Us>(pos.pieces(Us, PAWN));
     attackedBy[Us][ALL_PIECES] = attackedBy[Us][KING] | attackedBy[Us][PAWN];
     attackedBy2[Us] = attackedBy[Us][KING] & attackedBy[Us][PAWN];
-    memset(DarkPieces, 0, sizeof DarkPieces);
     for (PieceType i = ROOK; i <= BISHOP; ++i) {
         Bitboard b;
         b = pos.pieces(Us, i);
@@ -458,6 +457,7 @@ namespace {
     }
 
     // Main evaluation begins here
+    std::memset(DarkPieces, 0, sizeof DarkPieces);
     initialize<WHITE>();
     initialize<BLACK>();
 
@@ -508,9 +508,12 @@ Value Eval::evaluate(const Position& pos, int* complexity) {
 
   return v;
 #else
-    if (complexity)
-        *complexity = 0;
     Value v = Evaluation<NO_TRACE>(pos).value();
+    // Material complexity, the same quantity search() derives on a TT hit
+    // (abs(staticEval - material_diff())). Returning 0 here made null-move pruning,
+    // its reduction and the time manager depend on whether the node had a TT hit.
+    if (complexity)
+        *complexity = abs(v - pos.material_diff());
     return v;
 #endif
 

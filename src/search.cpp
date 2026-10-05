@@ -54,6 +54,7 @@ int Numov_2 = 17;
 int Numov_3 = 340;
 int Numov_4 = 42;
 int Numov_5 = 140;
+int Numov_6 = 5;   // cap of the (eval - beta) term of the null-move reduction
 int Numov_9 = 1087;
 int probCut_1 = 83;
 int probCut_2 = 61;
@@ -658,7 +659,7 @@ namespace {
         // Step 2. Check for aborted search and repetition
         Value result;
         if (pos.is_repeated(result, ss->ply)) {
-            result == VALUE_DRAW ? value_draw(pos.this_thread()) : result;
+            result = result == VALUE_DRAW ? value_draw(pos.this_thread()) : result;
 #if SEARCHDEBUG
             if (debugPrint) {
                 sync_cout << "[" << __LINE__ << "]" << debugFen << " " << result << sync_endl;
@@ -859,7 +860,9 @@ namespace {
         assert(eval - beta >= 0);
 
         // Null move dynamic reduction based on depth, eval and complexity of position
-        Depth R = std::min(int(eval - beta) / Numov_5, 0) + depth / 3 + 4 - (complexity > Numov_9);
+        // The cap used to be 0: eval >= beta is asserted just above, so the whole term
+        // was always 0 and the reduction ignored how far eval is above beta.
+        Depth R = std::min(int(eval - beta) / Numov_5, Numov_6) + depth / 3 + 4 - (complexity > Numov_9);
 
         ss->currentMove = MOVE_NULL;
         ss->continuationHistory = &thisThread->continuationHistory[0][0][NO_PIECE][0];

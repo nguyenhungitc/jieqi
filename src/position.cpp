@@ -22,6 +22,8 @@
 #include <cstring> // For std::memset, std::memcmp
 #include <iomanip>
 #include <sstream>
+#include <vector>
+#include <memory>
 
 #include "bitboard.h"
 #include "misc.h"
@@ -48,6 +50,16 @@ namespace Zobrist {
 namespace {
 
 const string PieceToChar(" RACPNBK racpnbk XXXXXX  xxxxxx ");
+
+// Number of pieces of each type a side starts with (index: PieceType)
+constexpr int InitialCount[PIECE_TYPE_NB] = { 0, 2, 2, 2, 5, 2, 2, 1, 0, 0 };
+
+// Square on Red's half whose starting piece type gives the movement of a face-down
+// piece of colour c on s, or -1 if s is not one of c's starting squares.
+int dark_origin(Color c, int s) {
+    int t = (c == WHITE ? s : SQ_I9 - s);
+    return (t >= 0 && t <= SQ_I4 && BPiece[t] != NO_PIECE_TYPE) ? t : -1;
+}
 
 constexpr Piece Pieces[] = { W_ROOK, W_ADVISOR, W_CANNON, W_PAWN, W_KNIGHT, W_BISHOP, W_KING,
                              B_ROOK, B_ADVISOR, B_CANNON, B_PAWN, B_KNIGHT, B_BISHOP, B_KING,
@@ -156,67 +168,77 @@ Position& Position::set(const string& fenStr, StateInfo* si, Thread* th) {
   ss >> std::noskipws;
 
   // 1. Piece placement
+  // Squares outside the board and face-down pieces off their side's starting points
+  // are skipped: a malformed FEN used to write outside board[] (ASan: stack-buffer-
+  // overflow in put_piece) or create a face-down piece with no movement type.
+  // fen_is_valid() rejects such FENs; this only keeps set() memory-safe.
   std::vector<std::pair<Piece, Square>> putPieces;
+  int file = 0, rank = RANK_9;
   while ((ss >> token) && !isspace(token))
   {
       if (isdigit(token))
-          sq += (token - '0') * EAST; // Advance the given number of files
+          file += token - '0';
 
       else if (token == '/')
-          sq += 2 * SOUTH;
+          --rank, file = 0;
 
-      else if ((idx = PieceToChar.find(token)) != string::npos) {
-          if (token == 'x') {
-              int s = sq;
-              if (s > SQ_I4)s = SQ_I9 - s;
-              putPieces.push_back(std::make_pair(Piece(BPiece[s] | 8 | 16), sq));
-              //put_piece(Piece(BPiece[s]|8|16), sq);
+      else if ((idx = PieceToChar.find(token)) != string::npos && token != ' ') {
+          if (file < FILE_NB && rank >= RANK_0) {
+              sq = make_square(File(file), Rank(rank));
+              if (token == 'x' || token == 'X') {
+                  Color c = token == 'X' ? WHITE : BLACK;
+                  int o = dark_origin(c, sq);
+                  if (o >= 0)
+                      putPieces.push_back(std::make_pair(Piece(make_piece(c, BPiece[o]) | 16), sq));
+              }
+              else
+                  put_piece(Piece(idx), sq);
           }
-          else if (token == 'X') {
-              int s = sq;
-              if (s > SQ_I4)s = SQ_I9 - s;
-              //put_piece(Piece(BPiece[s]|16 ), sq);
-              putPieces.push_back(std::make_pair(Piece(BPiece[s] | 16), sq));
-          }
-          else {
-              put_piece(Piece(idx), sq);
-          }
-          ++sq;
+          ++file;
       }
   }
 
     // 2. Active color
     ss >> token;
     sideToMove = (token == 'w' ? WHITE : BLACK);
-    ss >> token;
 
-  //2.rest
+  // 3. Pools, then the optional move counters. The fields are split on whitespace:
+  // reading the pool character by character took the halfmove clock for the pool
+  // when the pool field was empty (as fen() writes it), and lost the move number.
+  std::vector<string> rest;
+  string field;
+  ss >> std::skipws;
+  while (ss >> field)
+      rest.push_back(field);
+  size_t k = 0;
+  string poolField;
+  if (k < rest.size() && !isdigit((unsigned char)rest[k][0]))
+      poolField = rest[k++];
+
   Piece pt = NO_PIECE;
   restPieces[WHITE].clear();
   restPieces[BLACK].clear();
   lastToken = ' ';
-  while ((ss >> token) && !isspace(token)) {
+  for (unsigned char c : poolField) {
+      token = c;
       lastToken = token;
-      if ((idx = PieceToChar.find(token)) != string::npos) {
-          if (token == 'x') {
+      if ((idx = PieceToChar.find(token)) != string::npos && token != ' ') {
+          if (token == 'x' || token == 'X')
               pt = NO_PIECE;
-          }
-          else if (token == 'X') {
-              pt = NO_PIECE;
-          }
-          else {
+          else
               pt = Piece(idx);
-          }
       }
 
       // A count is only meaningful after a pool piece letter (not after x/X, a king,
       // or at the start of the field): color_of(NO_PIECE) asserts, and in release
       // builds the count was silently added to Red's pool as NO_PIECE.
+      // The pools are capped at a side's initial set (15 pieces, at most 5 of a
+      // type): larger counts overflowed RestList's fixed arrays (segfault).
       if (isdigit(token) && pt != NO_PIECE && type_of(pt) != KING) {
-          for (int i = 0; i < std::min((token - '0'), 5); i++)
-          {
-              restPieces[color_of(pt)].push_back(pt);
-          }
+          RestList& rl = restPieces[color_of(pt)];
+          for (int i = 0; i < token - '0'; i++)
+              if (rl.countType(type_of(pt)) < InitialCount[type_of(pt)] && rl.size() < 15)
+                  rl.push_back(pt);
           lastToken = ' ';
       }
   }
@@ -224,15 +246,14 @@ Position& Position::set(const string& fenStr, StateInfo* si, Thread* th) {
   {
       put_piece(putPieces.at(i).first, putPieces.at(i).second);
   }
-  //restPieces[WHITE].shuffle();
-  //restPieces[BLACK].shuffle();
-  //restPieces[WHITE].print();
-  //restPieces[BLACK].print();
 
-  int dummy;
-
-  // 3-4. Halfmove clock and fullmove number
-  ss >> std::skipws >> dummy >> gamePly;
+  // 4-5. Halfmove clock (not used) and fullmove number; extra "-" fields of a
+  // standard xiangqi FEN ("w - - 0 1") are skipped.
+  while (k < rest.size() && rest[k] == "-")
+      ++k;
+  gamePly = 1;
+  if (k + 1 < rest.size())
+      gamePly = atoi(rest[k + 1].c_str());
 
   // Convert from fullmove starting from 1 to gamePly starting from 0,
   // handle also common incorrect FEN with fullmove = 0.
@@ -244,6 +265,116 @@ Position& Position::set(const string& fenStr, StateInfo* si, Thread* th) {
   assert(pos_is_ok());
 
   return *this;
+}
+
+
+/// Position::fen_is_valid() checks a jieqi FEN strictly, so that set() and the rest
+/// of the engine can rely on it: 10 ranks of 9 files, one king per side inside its
+/// palace, face-down pieces only on their own side's starting points, pools made of
+/// "<piece><digit>" pairs, no more pieces of a type than a side starts with, at least
+/// one pool identity per face-down piece, and the side not to move not in check
+/// (including the flying general). The pool field may be "-" or empty, and extra "-"
+/// fields (standard xiangqi FEN "w - - 0 1") are accepted.
+
+bool Position::fen_is_valid(const string& fenStr, string& err) {
+
+  std::istringstream ss(fenStr);
+  string board, side, tok;
+  if (!(ss >> board >> side)) { err = "missing board or side to move"; return false; }
+
+  int light[COLOR_NB][PIECE_TYPE_NB] = {}, dark[COLOR_NB] = {}, kings[COLOR_NB] = {};
+  int file = 0, rank = RANK_9;
+  for (char c : board)
+  {
+      if (c == '/')
+      {
+          if (file != FILE_NB) { err = "rank " + std::to_string(rank) + " has " + std::to_string(file) + " files"; return false; }
+          if (--rank < RANK_0) { err = "more than 10 ranks"; return false; }
+          file = 0;
+          continue;
+      }
+      if (c >= '1' && c <= '9')
+      {
+          if ((file += c - '0') > FILE_NB) { err = "rank " + std::to_string(rank) + " has more than 9 files"; return false; }
+          continue;
+      }
+      size_t idx = PieceToChar.find(c);
+      if (c == ' ' || idx == string::npos) { err = string("invalid character '") + c + "' in board"; return false; }
+      if (file >= FILE_NB) { err = "rank " + std::to_string(rank) + " has more than 9 files"; return false; }
+      Square s = make_square(File(file), Rank(rank));
+      if (c == 'X' || c == 'x')
+      {
+          Color col = c == 'X' ? WHITE : BLACK;
+          if (dark_origin(col, s) < 0) { err = "face-down piece on " + UCI::square(s) + ", not a starting point of its side"; return false; }
+          dark[col]++;
+      }
+      else
+      {
+          Piece pc = Piece(idx);
+          if (type_of(pc) == KING)
+          {
+              kings[color_of(pc)]++;
+              if (!(Palace & s)) { err = "king outside the palace on " + UCI::square(s); return false; }
+          }
+          else
+              light[color_of(pc)][type_of(pc)]++;
+      }
+      ++file;
+  }
+  if (rank != RANK_0 || file != FILE_NB) { err = "board must have 10 ranks of 9 files"; return false; }
+  if (kings[WHITE] != 1 || kings[BLACK] != 1) { err = "each side needs exactly one king"; return false; }
+  if (side != "w" && side != "b") { err = "side to move must be 'w' or 'b'"; return false; }
+
+  std::vector<string> rest;
+  while (ss >> tok)
+      rest.push_back(tok);
+  size_t k = 0;
+  string pool;
+  if (k < rest.size() && !isdigit((unsigned char)rest[k][0]))
+      pool = rest[k++];
+  if (pool == "-")
+      pool.clear();
+
+  int inPool[COLOR_NB][PIECE_TYPE_NB] = {}, poolSize[COLOR_NB] = {};
+  for (size_t i = 0; i < pool.size(); i += 2)
+  {
+      size_t idx = string("RACPNBracpnb").find(pool[i]);
+      if (idx == string::npos) { err = string("invalid pool piece '") + pool[i] + "'"; return false; }
+      if (i + 1 >= pool.size() || !isdigit((unsigned char)pool[i + 1])) { err = string("pool piece '") + pool[i] + "' must be followed by one digit"; return false; }
+      Piece pc = Piece(PieceToChar.find(pool[i]));
+      inPool[color_of(pc)][type_of(pc)] += pool[i + 1] - '0';
+      poolSize[color_of(pc)] += pool[i + 1] - '0';
+  }
+
+  while (k < rest.size() && rest[k] == "-")
+      ++k;
+  for (int n = 0; k < rest.size() && n < 2; ++k, ++n)
+      if (rest[k].find_first_not_of("0123456789") != string::npos) { err = "move counters must be numbers"; return false; }
+
+  for (Color c : { WHITE, BLACK })
+  {
+      for (PieceType pt : { ROOK, ADVISOR, CANNON, PAWN, KNIGHT, BISHOP })
+          if (light[c][pt] + inPool[c][pt] > InitialCount[pt])
+          {
+              err = string("too many '") + PieceToChar[make_piece(c, pt)] + "' (face-up plus pool > " + std::to_string(InitialCount[pt]) + ")";
+              return false;
+          }
+      if (dark[c] > poolSize[c])
+      {
+          err = std::to_string(dark[c]) + " face-down " + (c == WHITE ? "red" : "black") + " pieces but only " + std::to_string(poolSize[c]) + " identities in the pool";
+          return false;
+      }
+  }
+
+  // The text is well formed, so set() is safe. Check the position itself.
+  auto si = std::make_unique<StateInfo>();
+  auto p  = std::make_unique<Position>();
+  p->set(fenStr, si.get(), nullptr);
+  Color them = ~p->side_to_move();
+  if (p->checkers_to(p->side_to_move(), p->square<KING>(them))) { err = "the side not to move is in check"; return false; }
+  if (attacks_bb<ROOK>(p->square<KING>(WHITE), p->pieces()) & p->pieces(BLACK, KING)) { err = "the kings face each other"; return false; }
+
+  return true;
 }
 
 
@@ -526,12 +657,9 @@ bool Position::gives_check(Move m, PieceType flipped) {
   PieceType pt;
 
   if (isDark(from)) {
-      if (flipped) {
-          pt = flipped;
-      }
-      else {
-          return false;
-      }
+      // Identity unknown: skip the direct-check test, but the discovered / screen
+      // checks below do not depend on the identity.
+      pt = flipped ? flipped : NO_PIECE_TYPE;
       //pt = type_of(restPieces[sideToMove].peek());
   }
   else
@@ -550,7 +678,7 @@ bool Position::gives_check(Move m, PieceType flipped) {
 
   // Is there a discovered check?
   if (attacks_bb<ROOK>(ksq) & pieces(sideToMove, CANNON))
-      return checkers_to(sideToMove, ksq, (pieces() ^ from) | to);
+      return checkers_to(sideToMove, ksq, (pieces() ^ from) | to) & ~square_bb(from);
   else if ((blockers_for_king(~sideToMove) & from) && !aligned(from, to, ksq))
       return true;
 
@@ -600,7 +728,6 @@ bool Position::getDark(StateInfo& newSt, int& typecount, bool& isDarkDepth) {
     // search reads both (priorCapture, captured_piece(), chase detection).
     newSt.move = st->move;
     newSt.capturedPiece = st->capturedPiece;
-    newSt.chased = 0;
     newSt.darkPiece = NO_PIECE;
     newSt.darkSquare = SQ_NONE;
     newSt.darkTypeIndex = NO_PIECE_TYPE;
@@ -724,6 +851,10 @@ bool Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
       // Identity supplied by the GUI: reveal the piece on `from` permanently, in the
       // current (history) state, before moving it.
       Piece darkPc = piece_on(from);
+      // UCI's parse_move() guarantees these; they used to be trusted blindly.
+      assert(Darkof(darkPc) == UNKNOWN);
+      assert(color_of(to_pc) == sideToMove && type_of(to_pc) != KING);
+      assert(restPieces[sideToMove].countType(type_of(to_pc)) > 0);
       const int evgOld = restPieces[sideToMove].evgValueRaw();
       remove_piece(from);
       st->materialKey ^= Zobrist::psq[darkPc][pieceCount[darkPc]];
@@ -798,6 +929,9 @@ bool Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
       remove_piece(capsq);
       Piece capPiece = cap_Piece(m);
       if (capPiece) {
+          assert(Darkof(captured) == UNKNOWN);
+          assert(color_of(capPiece) == them && type_of(capPiece) != KING);
+          assert(restPieces[them].countType(type_of(capPiece)) > 0);
           const int evgThemOld = restPieces[them].evgValueRaw();
           restPieces[them].pop_back(type_of(capPiece));
           // st is already the new state here, whose key is overwritten with k below:
@@ -1028,7 +1162,7 @@ bool Position::see_ge(Move m, Value threshold) const {
           attackers = nonCannons | cannons;
       }
 
-      else if ((bb = stmAttackers & pieces(ADVISOR)))
+      else if ((bb = stmAttackers & pieces(ADVISOR, ADVISOR_B)))
       {
           if ((swap = AdvisorValueMg - swap) < res)
               break;
@@ -1136,7 +1270,7 @@ void Position::light_undo_move(Move m, Piece captured, int id) {
 
 /// Position::set_chase_info() sets the chase information from state st - d to state st
 
-void Position::set_chase_info(int d) {
+void Position::set_chase_info(int d, uint16_t* chase) {
 
     // Grant each piece on board a unique id for each side
     int whiteId = 0;
@@ -1145,14 +1279,16 @@ void Position::set_chase_info(int d) {
         if (board[s] != NO_PIECE)
             idBoard[s] = color_of(board[s]) == WHITE ? whiteId++ : blackId++;
 
-    // Rollback until we reached st - d
+    // Rollback until we reached st - d. chase[i] receives the chase information of
+    // the state i plies before the starting one. It used to be written into
+    // StateInfo::chased, but the states before the root are shared by all search
+    // threads (ThreadPool::start_thinking), so that was a data race (TSan).
     for (int i = 0; i < d; ++i) {
-        uint16_t& chase = st->chased;
         ChaseMap newChase = chased(~sideToMove);
         light_undo_move(st->move, st->capturedPiece);
         st = st->previous;
         // Take the exact diff to detect the chase
-        chase = newChase & chased(sideToMove);
+        chase[i] = newChase & chased(sideToMove);
     }
 }
 
@@ -1304,19 +1440,21 @@ bool Position::is_repeated(Value& result, int ply) const {
             Position rollback;
             memcpy((void *)&rollback, (const void *)this, offsetof(Position, filter));
 
-            // Set up chase information
-            rollback.set_chase_info(i);
+            // Set up chase information: chase[k] belongs to the state k plies back.
+            // Kept local so that the shared pre-root states are never written.
+            std::vector<uint16_t> chase(i);
+            rollback.set_chase_info(i, chase.data());
 
             // Chasing detection
             stp = st->previous->previous;
-            uint16_t chaseThem = st->chased & stp->chased;
-            uint16_t chaseUs = st->previous->chased & stp->previous->chased;
+            uint16_t chaseThem = chase[0] & chase[2];
+            uint16_t chaseUs = chase[1] & chase[3];
 
             for (int j = 4; j <= i; j += 2)
             {
                 // Chase stops after i moves
                 if (j != i)
-                    chaseThem &= stp->previous->previous->chased;
+                    chaseThem &= chase[j];
                 stp = stp->previous->previous;
 
                 // Return a score if a position repeats once earlier.
@@ -1327,7 +1465,7 @@ bool Position::is_repeated(Value& result, int ply) const {
                 }
 
                 if (j + 1 <= i)
-                    chaseUs &= stp->previous->chased;
+                    chaseUs &= chase[j + 1];
             }
         }
 
