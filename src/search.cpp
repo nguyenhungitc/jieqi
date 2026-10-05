@@ -1869,7 +1869,10 @@ dark_undo:
           SC.setUs(pos.isFirstSide());
           while (pos.getDark(darkSt, typecount, isDarkDepth))
           {
-              vTmp = -qsearch<nodeType>(pos, ss + 1, -beta, -alpha, isDarkDepth ? 0 : depth - 1);
+              // Not 'isDarkDepth ? 0 : depth - 1' as in search(): there 0 means "drop
+              // into qsearch", but in qsearch it is the largest depth and re-enables
+              // quiet checks (DEPTH_QS_CHECKS), also below DEPTH_QS_RECAPTURES.
+              vTmp = -qsearch<nodeType>(pos, ss + 1, -beta, -alpha, depth - 1);
               tryTypeTimes++;
               SC.append(pos.piece_on(to_sq(move)), vTmp, typecount);
               pos.setDark();
