@@ -1168,7 +1168,10 @@ bool Position::see_ge(Move m, Value threshold) const {
               break;
 
           occupied ^= least_significant_square_bb(bb);
-          nonCannons |= attacks_bb<KNIGHT_TO>(to, occupied) & pieces(KNIGHT);
+          // The advisor stood diagonally next to 'to', on a square that is both a
+          // knight's leg and a bishop's eye: either piece may now attack 'to'.
+          nonCannons |= (attacks_bb<KNIGHT_TO>(to, occupied) & pieces(KNIGHT))
+                      | (attacks_bb<BISHOP>(to, occupied) & pieces(BISHOP));
           attackers = nonCannons | cannons;
       }
 
