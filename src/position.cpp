@@ -1151,9 +1151,12 @@ bool Position::see_ge(Move m, Value threshold) const {
 
       // Locate and remove the next least valuable attacker, and add to the
       // bitboard 'attackers' any protential attackers when it is removed.
+      // Each attacker is valued with value_on(), like the first mover and the
+      // captured piece above: a face-down piece is worth the average of its pool,
+      // not the value of the piece type that its starting point gives it.
       if ((bb = stmAttackers & pieces(PAWN)))
       {
-          if ((swap = PawnValueMg - swap) < res)
+          if ((swap = value_on(lsb(bb)) - swap) < res)
               break;
 
           occupied ^= least_significant_square_bb(bb);
@@ -1164,7 +1167,7 @@ bool Position::see_ge(Move m, Value threshold) const {
 
       else if ((bb = stmAttackers & pieces(ADVISOR, ADVISOR_B)))
       {
-          if ((swap = AdvisorValueMg - swap) < res)
+          if ((swap = value_on(lsb(bb)) - swap) < res)
               break;
 
           occupied ^= least_significant_square_bb(bb);
@@ -1177,7 +1180,7 @@ bool Position::see_ge(Move m, Value threshold) const {
 
       else if ((bb = stmAttackers & pieces(BISHOP)))
       {
-          if ((swap = BishopValueMg - swap) < res)
+          if ((swap = value_on(lsb(bb)) - swap) < res)
               break;
 
           occupied ^= least_significant_square_bb(bb);
@@ -1185,7 +1188,7 @@ bool Position::see_ge(Move m, Value threshold) const {
 
       else if ((bb = stmAttackers & pieces(CANNON)))
       {
-          if ((swap = CannonValueMg - swap) < res)
+          if ((swap = value_on(lsb(bb)) - swap) < res)
               break;
 
           occupied ^= least_significant_square_bb(bb);
@@ -1195,7 +1198,7 @@ bool Position::see_ge(Move m, Value threshold) const {
 
       else if ((bb = stmAttackers & pieces(KNIGHT)))
       {
-          if ((swap = KnightValueMg - swap) < res)
+          if ((swap = value_on(lsb(bb)) - swap) < res)
               break;
 
           occupied ^= least_significant_square_bb(bb);
@@ -1203,7 +1206,7 @@ bool Position::see_ge(Move m, Value threshold) const {
 
       else if ((bb = stmAttackers & pieces(ROOK)))
       {
-          if ((swap = RookValueMg - swap) < res)
+          if ((swap = value_on(lsb(bb)) - swap) < res)
               break;
 
           occupied ^= least_significant_square_bb(bb);
