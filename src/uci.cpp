@@ -44,6 +44,19 @@ namespace {
   //const char* StartFEN = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w";
   const char* StartFEN = "xxxxkxxxx/9/1x5x1/x1x1x1x1x/9/9/X1X1X1X1X/1X5X1/9/XXXXKXXXX w R2A2C2P5N2B2r2a2c2p5n2b2 0 1";
 
+  // root_move() reads a move of "go searchmoves" or "banmoves". These take the same
+  // notation as "position ... moves", where a move may carry identity characters
+  // after its four square characters (e3e4P, b2b9Cn). They only select a root move,
+  // for which the squares are enough: passing the whole token to to_move() turned
+  // every such move into MOVE_NONE ("searchmoves e3e4P" gave "bestmove (none)",
+  // "banmoves c3c4P" did not ban c3c4).
+  Move root_move(const Position& pos, const string& token) {
+    if (token.size() < 4 || token.size() > 6)
+        return MOVE_NONE;
+    string str = token.substr(0, 4);
+    return UCI::to_move(pos, str);
+  }
+
 
   // position() is called when the engine receives the "position" UCI command.
   // It sets up the position that is described in the given FEN string ("fen") or
@@ -230,7 +243,7 @@ namespace {
     while (is >> token)
         if (token == "searchmoves") // Needs to be the last command on the line
             while (is >> token)
-                limits.searchmoves.push_back(UCI::to_move(pos, token));
+                limits.searchmoves.push_back(root_move(pos, token));
 #if SEARCHDEBUG
         else if (token == "watch") // Needs to be the last command on the line{
         {
@@ -374,7 +387,7 @@ void UCI::loop(int argc, char* argv[]) {
       else if (token == "setoption")  setoption(is);
       else if (token == "banmoves")
           while (is >> token)
-              banmoves.push_back(UCI::to_move(pos, token));
+              banmoves.push_back(root_move(pos, token));
       else if (token == "go")         go(pos, is, states, banmoves), banmoves.clear();
       else if (token == "position")   position(pos, is, states);
       else if (token == "fen" || token == "startpos") is.seekg(0), position(pos, is, states);
