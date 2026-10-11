@@ -11,7 +11,7 @@ trap 'error ${LINENO}' ERR
 
 # obtain
 
-signature=`./PikaJieQi bench 2>&1 | grep "Nodes searched  : " | awk '{print $4}'`
+signature=`./jieqi bench 2>&1 | grep "Nodes searched  : " | awk '{print $4}'`
 
 if [ $# -gt 0 ]; then
    # compare to given reference

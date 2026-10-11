@@ -1,11 +1,12 @@
 /*
-  Pikafish, a UCI chess variant playing engine derived from Stockfish
+  Jieqi, a UCI jieqi engine derived from Pikafish and Stockfish
+  Copyright (C) 2026 The Jieqi developers
   Copyright (C) 2018-2022 PikaCat++
-  Pikafish is free software: you can redistribute it and/or modify
+  Jieqi is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
-  Pikafish is distributed in the hope that it will be useful,
+  Jieqi is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
@@ -18,7 +19,7 @@
 
 #include "types.h"
 
-namespace Stockfish {
+namespace Jieqi {
 
 #define B(h, l) (Bitboard(h) << 64) ^ Bitboard(l)
 
@@ -397,6 +398,6 @@ constexpr Bitboard KnightToMagicsInit[SQUARE_NB] = {
 };
 
 #undef B
-} // namespace Stockfish
+} // namespace Jieqi
 
 #endif // #ifndef MAGICS_H_INCLUDED

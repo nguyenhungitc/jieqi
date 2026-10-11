@@ -1,8 +1,9 @@
-# Pikafish `jieqi_old`: verified fixes
+# Jieqi
 
-This branch is the jieqi (揭棋, xiangqi with face-down pieces) engine from Pikafish's
-`jieqi_old` branch, with a series of correctness fixes on top. It uses a classical
-hand-written evaluation and no neural network.
+Jieqi is a UCI engine for jieqi (揭棋, xiangqi with face-down pieces). It uses a
+classical hand-written evaluation and no neural network. It is based on the jieqi engine of
+Pikafish's `jieqi_old` branch, with a series of correctness fixes on top. For the NNUE
+engine, see [Maskfish](https://github.com/official-maskfish/maskfish).
 
 Every fix addresses a defect that was reproduced and measured before and after the change.
 Each commit message describes the defect, how it was measured and the effect of the fix. The
@@ -14,7 +15,7 @@ measurement scripts and raw results are not part of this repository.
 `jieqi_old`, commit `23b9466c`, imported here as `d95db86` ("Initial commit"). The import
 leaves the engine source unchanged. It differs from upstream only in that:
 
-- `src/position.cpp`, `src/uci.cpp` and `Copying.txt` use LF line endings;
+- `src/position.cpp`, `src/uci.cpp` use LF line endings;
 - the CI workflow (`.github/workflows/pikafish.yml`) and the empty `Pikafish` submodule
   entry are removed;
 - `tests/*.sh` are no longer marked executable (run them with `bash tests/<script>.sh`).
@@ -41,7 +42,7 @@ One commit per defect, in order:
 
 ## Headline results
 
-Base (upstream `23b9466c`) vs head (this branch). Counters were taken on 32 self-play
+Base (upstream `23b9466c`) vs head (Jieqi). Counters were taken on 32 self-play
 positions at 400k nodes each, using an instrumented build that compares the incremental
 state with a from-scratch recomputation. The scripts are not included here.
 
@@ -60,7 +61,7 @@ state with a from-scratch recomputation. The scripts are not included here.
 
 - **Search results differ from base.** Base results are not reproducible in the first place:
   they change with stack contents. Playing strength has **not** been measured. Run a match
-  or an SPRT against base before relying on this branch.
+  or an SPRT against base before relying on Jieqi.
 - **Black's flip nodes are scored exactly like Red's.** The pessimistic branch of `ScoreCalc`
   now applies to whichever side flips.
 - **Flips at the dark-depth limit.** A flip that cannot be expanded there gets the static
@@ -84,7 +85,7 @@ Both were verified but are not fixed:
 ## Build
 
 ```sh
-make -C src -j build ARCH=x86-64-sse41-popcnt   # src/PikaJieQi
+make -C src -j build ARCH=x86-64-sse41-popcnt   # src/jieqi
 ```
 
 ## Using it
@@ -113,4 +114,5 @@ In a move list:
 
 ## License
 
-GPL-3.0-or-later, as upstream. See `Copying.txt` and `AUTHORS` for the Pikafish authors.
+Jieqi is free software, distributed under the GNU General Public License version 3
+or later (GPL-3.0-or-later).

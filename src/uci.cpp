@@ -1,13 +1,14 @@
 /*
-  Stockfish, a UCI chess playing engine derived from Glaurung 2.1
+  Jieqi, a UCI jieqi engine derived from Pikafish and Stockfish
+  Copyright (C) 2026 The Jieqi developers
   Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
 
-  Stockfish is free software: you can redistribute it and/or modify
+  Jieqi is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  Stockfish is distributed in the hope that it will be useful,
+  Jieqi is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
@@ -33,7 +34,7 @@
 
 using namespace std;
 
-namespace Stockfish {
+namespace Jieqi {
 
 extern vector<string> setup_bench(const Position&, istream&);
 
@@ -397,11 +398,11 @@ void UCI::loop(int argc, char* argv[]) {
       else if (token == "eval")     trace_eval(pos);
       else if (token == "compiler") sync_cout << compiler_info() << sync_endl;
       else if (token == "--help" || token == "help" || token == "--license" || token == "license")
-          sync_cout << "\nPikafish is a powerful xiangqi engine for playing and analyzing."
+          sync_cout << "\nJieqi is a jieqi engine for playing and analyzing."
                        "\nIt is released as free software licensed under the GNU GPLv3 License."
-                       "\nPikafish is normally used with a graphical user interface (GUI) and implements"
+                       "\nJieqi is normally used with a graphical user interface (GUI) and implements"
                        "\nthe Universal Chess Interface (UCI) protocol to communicate with a GUI, an API, etc."
-                       "\nFor any further information, visit https://github.com/PikaCat-OuO/Pikafish#readme"
+                       "\nFor any further information, visit https://github.com/nguyenhungitc/jieqi#readme"
                        "\nor read the corresponding README.md and Copying.txt files distributed along with this program.\n" << sync_endl;
       else if (!token.empty() && token[0] != '#')
           sync_cout << "Unknown command: '" << cmd << "'. Type help for more information." << sync_endl;
@@ -491,4 +492,4 @@ Move UCI::to_move(const Position& pos, string& str) {
   return MOVE_NONE;
 }
 
-} // namespace Stockfish
+} // namespace Jieqi

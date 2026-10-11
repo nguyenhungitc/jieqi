@@ -13,7 +13,7 @@ src/.vs/
 src/x64/
 
 # Built binary
-src/pikafish*
+src/jieqi*
 src/-lstdc++.res
 
 # Neural network for the NNUE evaluation

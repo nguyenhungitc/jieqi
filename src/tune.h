@@ -1,13 +1,14 @@
 /*
-  Stockfish, a UCI chess playing engine derived from Glaurung 2.1
+  Jieqi, a UCI jieqi engine derived from Pikafish and Stockfish
+  Copyright (C) 2026 The Jieqi developers
   Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
 
-  Stockfish is free software: you can redistribute it and/or modify
+  Jieqi is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  Stockfish is distributed in the hope that it will be useful,
+  Jieqi is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
@@ -24,7 +25,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace Stockfish {
+namespace Jieqi {
 
 typedef std::pair<int, int> Range; // Option's min-max values
 typedef Range (RangeFun) (int);
@@ -158,6 +159,6 @@ public:
 
 #define UPDATE_ON_LAST() bool UNIQUE(p, __LINE__) = Tune::update_on_last = true
 
-} // namespace Stockfish
+} // namespace Jieqi
 
 #endif // #ifndef TUNE_H_INCLUDED

@@ -1,12 +1,13 @@
-# Pikafish, a UCI chess playing engine derived from Stockfish
+# Jieqi, a UCI jieqi engine derived from Pikafish and Stockfish
+# Copyright (C) 2026 The Jieqi developers
 # Copyright (C) 2004-2022 The Pikafish developers (see AUTHORS file)
 #
-# Pikafish is free software: you can redistribute it and/or modify
+# Jieqi is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Pikafish is distributed in the hope that it will be useful,
+# Jieqi is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
@@ -39,9 +40,9 @@ endif
 
 ### Executable name
 ifeq ($(target_windows),yes)
-	EXE = PikaJieQi.exe
+	EXE = jieqi.exe
 else
-	EXE = PikaJieQi
+	EXE = jieqi
 endif
 
 ### Installation dir definitions
@@ -727,7 +728,7 @@ endif
 
 help:
 	@echo ""
-	@echo "To compile pikafish, type: "
+	@echo "To compile jieqi, type: "
 	@echo ""
 	@echo "make target ARCH=arch [COMP=compiler] [COMPCXX=cxx]"
 	@echo ""
@@ -838,10 +839,10 @@ objclean:
 profileclean:
 	@rm -rf profdir
 	@rm -f bench.txt *.gcda *.gcno *.s
-	@rm -f pikafish.profdata *.profraw
-	@rm -f pikafish.*args*
-	@rm -f pikafish.*lt*
-	@rm -f pikafish.res
+	@rm -f jieqi.profdata *.profraw
+	@rm -f jieqi.*args*
+	@rm -f jieqi.*lt*
+	@rm -f jieqi.res
 	@rm -f ./-lstdc++.res
 
 default:
@@ -919,9 +920,9 @@ clang-profile-make:
 	all
 
 clang-profile-use:
-	$(XCRUN) llvm-profdata merge -output=pikafish.profdata *.profraw
+	$(XCRUN) llvm-profdata merge -output=jieqi.profdata *.profraw
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
-	EXTRACXXFLAGS='-fprofile-instr-use=pikafish.profdata' \
+	EXTRACXXFLAGS='-fprofile-instr-use=jieqi.profdata' \
 	EXTRALDFLAGS='-fprofile-use ' \
 	all
 

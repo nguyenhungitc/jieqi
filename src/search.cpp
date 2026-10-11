@@ -1,13 +1,14 @@
 /*
-  Stockfish, a UCI chess playing engine derived from Glaurung 2.1
+  Jieqi, a UCI jieqi engine derived from Pikafish and Stockfish
+  Copyright (C) 2026 The Jieqi developers
   Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
 
-  Stockfish is free software: you can redistribute it and/or modify
+  Jieqi is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  Stockfish is distributed in the hope that it will be useful,
+  Jieqi is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
@@ -37,7 +38,7 @@
 #include "tune.h"
 
 
-using namespace Stockfish;
+using namespace Jieqi;
 
 int futi_mar = 250;
 int redu_1 = 4405;
@@ -143,7 +144,7 @@ int falling_9 = 1852908;
 int timeela_1 = 400;
 
 
-namespace Stockfish {
+namespace Jieqi {
 
 
 
@@ -439,7 +440,7 @@ void Thread::search() {
               // Adjust the effective depth searched, but ensuring at least one effective increment for every
               // four searchAgain steps (see issue #2717).
               Depth adjustedDepth = std::max(1, rootDepth - failedHighCnt - 3 * (searchAgainCounter + 1) / 4);
-              bestValue = Stockfish::search<Root>(rootPos, ss, alpha, beta, adjustedDepth, false);
+              bestValue = Jieqi::search<Root>(rootPos, ss, alpha, beta, adjustedDepth, false);
 
               // Bring the best move to the front. It is critical that sorting
               // is done with a stable algorithm because all the values but the
@@ -2026,4 +2027,4 @@ bool RootMove::extract_ponder_from_tt(Position& pos) {
     return pv.size() > 1;
 }
 
-} // namespace Stockfish
+} // namespace Jieqi

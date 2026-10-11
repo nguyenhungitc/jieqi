@@ -1,13 +1,14 @@
 ﻿/*
-  Stockfish, a UCI chess playing engine derived from Glaurung 2.1
+  Jieqi, a UCI jieqi engine derived from Pikafish and Stockfish
+  Copyright (C) 2026 The Jieqi developers
   Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
 
-  Stockfish is free software: you can redistribute it and/or modify
+  Jieqi is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  Stockfish is distributed in the hope that it will be useful,
+  Jieqi is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
@@ -63,7 +64,7 @@ typedef WORD(*fun5_t)();
 
 using namespace std;
 
-namespace Stockfish {
+namespace Jieqi {
 
 namespace {
 
@@ -148,9 +149,9 @@ static bool use_english() {
 }
 
 
-/// engine_info() returns the full name of the current PikaFish version. This
-/// will be either "Pikafish YYYY-MM-DD" (where YYYY-MM-DD is the date when
-/// the program was compiled) or "Pikafish <Version>", depending on whether
+/// engine_info() returns the full name of the current Jieqi version. This
+/// will be either "Jieqi YYYY-MM-DD" (where YYYY-MM-DD is the date when
+/// the program was compiled) or "Jieqi <Version>", depending on whether
 /// Version is empty.
 
 string engine_info(bool to_uci) {
@@ -159,7 +160,7 @@ string engine_info(bool to_uci) {
   string month, day, year;
   stringstream ss, date(__DATE__); // From compiler, format is "Sep 21 2008"
 
-  ss << (use_english() ? "Pikafish " : "皮卡鱼 ") << Version << setfill('0');
+  ss << (use_english() ? "Jieqi " : "揭棋 ") << Version << setfill('0');
 
   if (Version.empty())
   {
@@ -168,10 +169,10 @@ string engine_info(bool to_uci) {
   }
 
   if (use_english())
-      ss << (to_uci ? "\nid author " : " by ") << "the Pikafish developers (see AUTHORS file)";
+      ss << (to_uci ? "\nid author " : " by ") << "the Jieqi developers";
   else
-      ss << (to_uci ? "\nid author " : " 开发团队: ") << "皮卡鱼开发团队(详情请查看作者文件)"
-         << (to_uci ? "" : "\n皮卡鱼(http://pikafish.org)是开源免费的象棋引擎, 欢迎加入我们的QQ群: 755655813");
+      ss << (to_uci ? "\nid author " : " 开发团队: ") << "Jieqi 开发团队"
+         << (to_uci ? "" : "\n揭棋 (https://github.com/nguyenhungitc/jieqi) 是开源免费的揭棋引擎");
 
   return ss.str();
 }
@@ -680,4 +681,4 @@ void init([[maybe_unused]] int argc, char* argv[]) {
 
 } // namespace CommandLine
 
-} // namespace Stockfish
+} // namespace Jieqi
