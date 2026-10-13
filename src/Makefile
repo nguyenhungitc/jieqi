@@ -112,7 +112,7 @@ endif
 # explicitly check for the list of supported architectures (as listed with make help),
 # the user can override with `make ARCH=x86-32-vnni256 SUPPORTED_ARCH=true`
 ifeq ($(ARCH), $(filter $(ARCH), \
-                 x86-64-vnni512 x86-64-vnni256 x86-64-avx512 x86-64-avxvnni x86-64-bmi2 \
+                 x86-64-avx512icl x86-64-vnni512 x86-64-vnni256 x86-64-avx512 x86-64-avxvnni x86-64-bmi2 \
                  x86-64-avx2 x86-64-sse41-popcnt x86-64-modern x86-64-ssse3 x86-64-sse3-popcnt \
                  x86-64 x86-32-sse41-popcnt x86-32-sse2 x86-32 ppc-64 ppc-32 e2k \
                  armv7 armv7-neon armv8 apple-silicon general-64 general-32 riscv64))
@@ -138,6 +138,7 @@ avxvnni = no
 avx512 = no
 vnni256 = no
 vnni512 = no
+avx512icl = no
 neon = no
 arm_version = 0
 STRIP = strip
@@ -259,6 +260,19 @@ ifeq ($(findstring -vnni512,$(ARCH)),-vnni512)
 	pext = yes
 	avx512 = yes
 	vnni512 = yes
+endif
+
+ifeq ($(findstring -avx512icl,$(ARCH)),-avx512icl)
+	popcnt = yes
+	sse = yes
+	sse2 = yes
+	ssse3 = yes
+	sse41 = yes
+	avx2 = yes
+	pext = yes
+	avx512 = yes
+	vnni512 = yes
+	avx512icl = yes
 endif
 
 ifeq ($(sse),yes)
@@ -635,6 +649,15 @@ ifeq ($(vnni512),yes)
 	endif
 endif
 
+ifeq ($(avx512icl),yes)
+	CXXFLAGS += -DUSE_AVX512 -DUSE_VNNI -DUSE_AVX512ICL
+	ifeq ($(comp),$(filter $(comp),gcc clang mingw))
+		CXXFLAGS += -mavx512f -mavx512bw -mavx512vnni -mavx512dq -mavx512vl -mavx512ifma \
+		            -mavx512vbmi -mavx512vbmi2 -mavx512vpopcntdq -mavx512bitalg \
+		            -mgfni -mvaes -mvpclmulqdq
+	endif
+endif
+
 ifeq ($(sse41),yes)
 	CXXFLAGS += -DUSE_SSE41
 	ifeq ($(comp),$(filter $(comp),gcc clang mingw))
@@ -743,6 +766,7 @@ help:
 	@echo ""
 	@echo "Supported archs:"
 	@echo ""
+	@echo "x86-64-avx512icl        > x86 64-bit with minimum avx512 support of Intel Ice Lake or AMD Zen 4"
 	@echo "x86-64-vnni512          > x86 64-bit with vnni support 512bit wide"
 	@echo "x86-64-vnni256          > x86 64-bit with vnni support 256bit wide"
 	@echo "x86-64-avx512           > x86 64-bit with avx512 support"
