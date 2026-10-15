@@ -39,6 +39,12 @@ One commit per defect, in order:
 | `684fac7f` | A move's value is its last (re-)search; `newDepth` is reset per identity |
 | `03d9dbc2` | The root PV only takes the line of the move it belongs to |
 | `057ccfd3` | GUI capture: the pool change goes into the new key |
+| `c541453` | `Reductions[]` sized for every depth (out-of-bounds read from depth 128) |
+| `6a45c85` | No `ponder` move and no PV continuation after a face-down move |
+| `afeeb8d` | bench: FENs in the format `fen_is_valid()` accepts (10 of 11 were rejected) |
+| `8db2212` | Step 10: the TT-depth reduction requires a TT hit |
+| `bef8e35` | `fen()`: an empty pool is written as `-` (`flip` misread the move counters) |
+| `1923019` | Time management: no NaN when the side to move has no time left |
 
 ## Headline results
 
@@ -71,16 +77,29 @@ state with a from-scratch recomputation. The scripts are not included here.
 - **UCI `position ... moves`.** A move of a face-down piece must carry its identity as a 5th
   character. A 4-character dark move prints `info string error: …`, and the rest of the move
   list is ignored. Positions sent as a FEN are unaffected.
+- **`ponder` and PV output.** No `ponder` move is printed when the best move or the reply
+  moves a face-down piece, and a PV stops after its first face-down move: neither can be
+  sent back by a GUI without the identity.
+- **`fen()`** writes an empty pool as `-` instead of an empty field.
+- **Bench signature.** All 11 bench positions are searched now, so the signature differs
+  from earlier builds (14137794 with the default `bench`).
 
 ## Known open issues
 
-Both were verified but are not fixed:
+These were verified but are not fixed:
 
 - **The evaluation is not colour-symmetric** because of `PSQT::psqCap`: at the symmetric start
   position it gives +1.35 / −2.60 pawns for Red. Fixing this requires re-tuning the table.
 - **`ScoreCalc` averages per-identity results** that may be bounds of different kinds
   (upper, lower or exact). An average of mixed bounds is not a bound. Fixing this is a
   design change (for example Star1/Star2-style windows at chance nodes).
+- **Face-down advisors are left out of the evaluation's attack maps**: `Evaluation` uses
+  `pieces(Us, ADVISOR)`, and a face-down advisor has type `ADVISOR_B`. Changing it changes
+  the evaluation and needs a strength test.
+- **`go perft` does not reveal**: after a dark move the piece stays face-down off its
+  starting point and keeps moving like the piece type of that point, so the counts do not
+  follow jieqi rules.
+- **No 60-move rule**: the halfmove clock of a FEN is ignored.
 
 ## Build
 
