@@ -503,12 +503,19 @@ string Position::fen() const {
           DarkNum[p]++;
       }
   }
+  // An empty pool is written as "-": an empty field left two spaces in a row,
+  // and flip(), which reads the fields one by one, took the halfmove clock for
+  // the pool and the fullmove number for the halfmove clock.
+  bool emptyPool = true;
   for (int i = 1; i < PIECE_NB; i++)
   {
       if (DarkNum[i] > 0) {
           ss << PieceToChar[Piece(i)] << DarkNum[i];
+          emptyPool = false;
       }
   }
+  if (emptyPool)
+      ss << '-';
   ss << " " << 0 << " " << 1 + (gamePly - (sideToMove == BLACK)) / 2;
 
   return ss.str();
