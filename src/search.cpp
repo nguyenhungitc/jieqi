@@ -167,8 +167,12 @@ namespace {
     return Value(futi_mar * (d - improving));
   }
 
-  // Reductions lookup table, initialized at startup
-  int Reductions[MAX_MOVES]; // [depth or moveNumber]
+  // Reductions lookup table, initialized at startup. It is indexed by the depth as
+  // well as by the move number: depths reach MAX_PLY, which is larger than
+  // MAX_MOVES, so the table must cover both (it was [MAX_MOVES], read out of
+  // bounds from depth 128 on).
+  constexpr int ReductionsSize = std::max(MAX_MOVES, MAX_PLY + 10);
+  int Reductions[ReductionsSize]; // [depth or moveNumber]
 
   Depth reduction(bool i, Depth d, int mn, Value delta, Value rootDelta) {
     int r = Reductions[d] * Reductions[mn];
@@ -238,7 +242,7 @@ namespace {
 
 void Search::init() {
 
-  for (int i = 1; i < MAX_MOVES; ++i)
+  for (int i = 1; i < ReductionsSize; ++i)
       Reductions[i] = int((double(redu_3)/double(1000.0) + std::log(Threads.size()) / 2) * std::log(i));
 }
 
