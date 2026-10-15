@@ -973,12 +973,16 @@ namespace {
     if (    PvNode
         && !ttMove)
         depth -= decr_0;
-        
-	if (    PvNode
+
+    // Reduce by how much the TT entry is shallower than this search. At the root,
+    // ttMove comes from rootMoves and not from the TT, so the entry must be a hit:
+    // a miss returns the slot to replace, whose depth belongs to another position.
+    if (    PvNode
         &&  depth > 1
-        &&  ttMove)
+        &&  ttMove
+        &&  ss->ttHit)
         depth -= std::clamp((depth - tte->depth()) / decr_1, 0, decr_2);
-        
+
     if (depth <= 0){
         value = qsearch<PV>(pos, ss, alpha, beta);
         return value;
@@ -1125,8 +1129,11 @@ moves_loop: // When in check, search starts here
               // Prune moves with negative SEE (~3 Elo)
               if (!pos.see_ge(move, Value(-Futi_par_4 * lmrDepth * lmrDepth - Futi_par_5 * lmrDepth)))
               {
+                  // The move is pruned either way; with a good history it is
+                  // also penalised with the other quiet moves (update_all_stats).
                   if (history > 0 && quietCount < 64)
-                      quietsSearched[quietCount++] = move;                  continue;
+                      quietsSearched[quietCount++] = move;
+                  continue;
               }
           }
       }
