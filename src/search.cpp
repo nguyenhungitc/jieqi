@@ -806,6 +806,17 @@ namespace {
         return ttValue;
     }
 
+    // The entry was deep enough but its bound points the wrong way: it cannot cut
+    // off here, so it is worth less (from Pikafish).
+    if (   !PvNode
+        && !excludedMove
+        && ss->ttHit
+        && depth > 5
+        && ttValue != VALUE_NONE
+        && tte->depth() > depth - (ttValue <= beta)
+        && !(tte->bound() & (ttValue >= beta ? BOUND_LOWER : BOUND_UPPER)))
+        tte->penalize(1);
+
     CapturePieceToHistory& captureHistory = thisThread->captureHistory;
 
     correctionValue = correction_value(thisThread, pos, ss);
@@ -1599,7 +1610,9 @@ dark_undo:
         tte->save(posKey, value_to_tt(bestValue, ss->ply), ss->ttPv,
                   bestValue >= beta ? BOUND_LOWER :
                   PvNode && bestMove ? BOUND_EXACT : BOUND_UPPER,
-                  depth, bestMove, unadjustedStaticEval);
+                  // A mated position (no move) holds at any depth (from Pikafish).
+                  moveCount ? depth : std::min(MAX_PLY - 1, depth + 6),
+                  bestMove, unadjustedStaticEval);
 
     // Update the correction history when the best move is not a capture and the
     // error points the same way as the bound (from Pikafish).

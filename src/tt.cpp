@@ -40,10 +40,15 @@ void TTEntry::save(Key k, Value v, bool pv, Bound b, Depth d, Move m, Value ev) 
   if (m || (uint16_t)k != key16)
       move16 = (uint16_t)m;
 
-  // Overwrite less valuable entries (cheapest checks first)
+  // Overwrite less valuable entries (cheapest checks first). An entry of an older
+  // search is always replaced (from Pikafish). The generation sits in the upper 5
+  // bits, above pv and bound: GENERATION_CYCLE absorbs their borrow, as in probe().
+  const bool old = (TranspositionTable::GENERATION_CYCLE + TT.generation8 - genBound8)
+                 & TranspositionTable::GENERATION_MASK;
   if (   b == BOUND_EXACT
       || (uint16_t)k != key16
-      || d - DEPTH_OFFSET + 2 * pv > depth8 - 4)
+      || d - DEPTH_OFFSET + 2 * pv > depth8 - 4
+      || old)
   {
       assert(d > DEPTH_OFFSET);
       assert(d < 256 + DEPTH_OFFSET);
@@ -54,6 +59,14 @@ void TTEntry::save(Key k, Value v, bool pv, Bound b, Depth d, Move m, Value ev) 
       value16   = (int16_t)v;
       eval16    = (int16_t)ev;
   }
+
+  // Secondary aging (from Pikafish): an entry that is kept is aged if it holds a
+  // decisive inexact value, which helps elementary mate finding.
+  else if (   depth8 + DEPTH_OFFSET >= 5
+           && Bound(genBound8 & 0x3) != BOUND_EXACT
+           && std::abs(value16) < VALUE_INFINITE
+           && std::abs(value16) >= VALUE_MATE_IN_MAX_PLY)
+      depth8 = uint8_t(std::max(int(depth8) - 1, 0));
 }
 
 

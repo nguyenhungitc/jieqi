@@ -20,6 +20,8 @@
 #ifndef TT_H_INCLUDED
 #define TT_H_INCLUDED
 
+#include <algorithm>
+
 #include "misc.h"
 #include "types.h"
 
@@ -45,6 +47,8 @@ struct TTEntry {
   bool is_pv()  const { return (bool)(genBound8 & 0x4); }
   Bound bound() const { return (Bound)(genBound8 & 0x3); }
   void save(Key k, Value v, bool pv, Bound b, Depth d, Move m, Value ev);
+  // Marks the entry as less useful by lowering its stored depth (0 = empty).
+  void penalize(int penalty) { depth8 = uint8_t(std::max(int(depth8) - penalty, 0)); }
 
 private:
   friend class TranspositionTable;
