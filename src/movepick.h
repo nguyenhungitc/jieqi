@@ -106,6 +106,16 @@ typedef Stats<int16_t, 29952, PIECE_NB, SQUARE_NB> PieceToHistory;
 /// (~63 elo)
 typedef Stats<PieceToHistory, NOT_USED, PIECE_NB, SQUARE_NB> ContinuationHistory;
 
+/// Correction histories (from Pikafish) record how far the static evaluation was
+/// from the search result, indexed by structure keys of the position
+/// ([side to move][key]) or by the moves leading to it ([piece][to] two, four and
+/// six plies back, then [piece][to] of the last move).
+constexpr int CORRECTION_HISTORY_SIZE  = 65536; // power of 2
+constexpr int CORRECTION_HISTORY_LIMIT = 1024;
+typedef Stats<int16_t, CORRECTION_HISTORY_LIMIT, COLOR_NB, CORRECTION_HISTORY_SIZE> CorrectionHistory;
+typedef Stats<int16_t, CORRECTION_HISTORY_LIMIT, PIECE_NB, SQUARE_NB> PieceToCorrectionHistory;
+typedef Stats<PieceToCorrectionHistory, NOT_USED, PIECE_NB, SQUARE_NB> ContinuationCorrectionHistory;
+
 
 /// MovePicker class is used to pick one pseudo-legal move at a time from the
 /// current position. The most important method is next_move(), which returns a

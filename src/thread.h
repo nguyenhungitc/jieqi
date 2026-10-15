@@ -74,6 +74,10 @@ public:
   ButterflyHistory mainHistory;
   CapturePieceToHistory captureHistory;
   ContinuationHistory continuationHistory[2][2];
+  CorrectionHistory pawnCorrectionHistory;
+  CorrectionHistory minorPieceCorrectionHistory;
+  CorrectionHistory nonPawnCorrectionHistory[COLOR_NB];
+  ContinuationCorrectionHistory continuationCorrectionHistory;
 };
 
 

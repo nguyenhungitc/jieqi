@@ -56,6 +56,10 @@ struct StateInfo {
   int    pliesFromIrreversible; // plies since the last capture or reveal
   int    rule60;                // plies counted by the 60-move rule
   int    check10[COLOR_NB];     // checks given by each side since the last reset
+  // Structure keys for the correction histories (see toggle_structure_keys()).
+  Key    pawnKey;
+  Key    minorPieceKey;
+  Key    nonPawnKey[COLOR_NB];
   int        darkDepth;
   int        darkTypes;
 
@@ -172,6 +176,9 @@ public:
   Key key_after(Move m) const;
   Key adjust_key60(Key k) const;
   Key material_key() const;
+  Key pawn_key() const { return st->pawnKey; }
+  Key minor_piece_key() const { return st->minorPieceKey; }
+  Key non_pawn_key(Color c) const { return st->nonPawnKey[c]; }
 
   // Other properties of the position
   Color side_to_move() const;
@@ -197,6 +204,7 @@ private:
   // Initialization helpers (used while setting up a position)
   void set_state(StateInfo* si) const;
   void set_check_info(StateInfo* si) const;
+  static void toggle_structure_keys(StateInfo* si, Piece pc, Square s);
 
   // Other helpers
   void move_piece(Square from, Square to);

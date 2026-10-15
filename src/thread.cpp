@@ -67,6 +67,14 @@ void Thread::clear() {
           for (auto& to : continuationHistory[inCheck][c])
               for (auto& h : to)
                   h->fill(-71);
+
+  pawnCorrectionHistory.fill(0);
+  minorPieceCorrectionHistory.fill(0);
+  nonPawnCorrectionHistory[WHITE].fill(0);
+  nonPawnCorrectionHistory[BLACK].fill(0);
+  for (auto& to : continuationCorrectionHistory)
+      for (auto& h : to)
+          h->fill(0);
 }
 
 

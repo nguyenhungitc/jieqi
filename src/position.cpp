@@ -46,7 +46,7 @@ namespace Zobrist {
   // least that large (it was [5], an out-of-bounds write in init()). Keeping the
   // fill loop as is keeps every Zobrist key bit-identical to upstream.
   Key psqDark[PIECE_NB][7];
-  Key side;
+  Key side, noPawns;
 }
 
 namespace {
@@ -126,6 +126,7 @@ void Position::init() {
 
 
   Zobrist::side = rng.rand<Key>();
+  Zobrist::noPawns = rng.rand<Key>(); // drawn last: the other keys are unchanged
 }
 
 
@@ -413,6 +414,27 @@ void Position::set_check_info(StateInfo* si) const {
 }
 
 
+/// Position::toggle_structure_keys() adds or removes piece pc on s in the structure
+/// keys that index the correction histories (classes as in Pikafish): pawnKey holds
+/// the pawns and, for jieqi, the face-down pieces, which do not move until they
+/// reveal, and the pools that price them (their psqDark keys are added where the
+/// main key gets them); minorPieceKey holds knights and cannons; nonPawnKey[c] all
+/// other face-up pieces of c, king included.
+
+void Position::toggle_structure_keys(StateInfo* si, Piece pc, Square s) {
+
+  Key z = Zobrist::psq[pc][s];
+  if ((pc & 16) || type_of(pc) == PAWN)
+      si->pawnKey ^= z;
+  else
+  {
+      si->nonPawnKey[color_of(pc)] ^= z;
+      if (type_of(pc) == KNIGHT || type_of(pc) == CANNON)
+          si->minorPieceKey ^= z;
+  }
+}
+
+
 /// Position::set_state() computes the hash keys of the position, and other
 /// data that once computed is updated incrementally as moves are made.
 /// The function is only used when a new position is set up, and to verify
@@ -421,6 +443,8 @@ void Position::set_check_info(StateInfo* si) const {
 void Position::set_state(StateInfo* si) const {
 
   si->key = si->materialKey = 0;
+  si->pawnKey = Zobrist::noPawns;
+  si->minorPieceKey = si->nonPawnKey[WHITE] = si->nonPawnKey[BLACK] = 0;
   si->material[WHITE] = si->material[BLACK] = VALUE_ZERO;
   si->checkersBB = checkers_to(~sideToMove, square<KING>(sideToMove));
   si->move = MOVE_NONE;
@@ -434,6 +458,7 @@ void Position::set_state(StateInfo* si) const {
       Square s = pop_lsb(b);
       Piece pc = piece_on(s);
       si->key ^= Zobrist::psq[pc][s];
+      toggle_structure_keys(si, pc, s);
 
       if (type_of(pc) != KING)
           si->material[color_of(pc)] += Darkof(pc) == UNKNOWN ?
@@ -446,10 +471,12 @@ void Position::set_state(StateInfo* si) const {
       for (int j = 0; j < restPieces[WHITE].countType(pt); j++)
       {
           si->key ^= Zobrist::psqDark[make_piece(WHITE, pt)][j];
+          si->pawnKey ^= Zobrist::psqDark[make_piece(WHITE, pt)][j];
       }
       for (int j = 0; j < restPieces[BLACK].countType(pt); j++)
       {
           si->key ^= Zobrist::psqDark[make_piece(BLACK, pt)][j];
+          si->pawnKey ^= Zobrist::psqDark[make_piece(BLACK, pt)][j];
       }
         
   }
@@ -748,6 +775,9 @@ bool Position::getDark(StateInfo& newSt, int& typecount, bool& isDarkDepth) {
     assert(color_of(old) == us);
     // Update hash key
     k ^= Zobrist::psq[old][ds] ^ Zobrist::psq[pc][ds];
+    toggle_structure_keys(st, old, ds);
+    toggle_structure_keys(st, pc, ds);
+    st->pawnKey ^= poolKey;
     //replcae
     // psq / material / materialKey. The dark piece is priced at the pool average evgOld
     // on its starting square (move_piece() does not move a dark piece's psq term). Replace
@@ -854,8 +884,11 @@ bool Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
       st->materialKey ^= Zobrist::psq[darkPc][pieceCount[darkPc]];
       restPieces[sideToMove].pop_back(type_of(to_pc));
       st->key ^= Zobrist::psqDark[to_pc][restPieces[sideToMove].countType(type_of(to_pc))];
+      st->pawnKey ^= Zobrist::psqDark[to_pc][restPieces[sideToMove].countType(type_of(to_pc))];
       put_piece(to_pc,from);
       st->key ^= Zobrist::psq[darkPc][from] ^ Zobrist::psq[to_pc][from];
+      toggle_structure_keys(st, darkPc, from);
+      toggle_structure_keys(st, to_pc, from);
       st->materialKey ^= Zobrist::psq[to_pc][pieceCount[to_pc] - 1];
       st->material[sideToMove] += PieceValue[MG][to_pc] - evgOld;
       reprice_dark(sideToMove, evgOld);
@@ -941,16 +974,20 @@ bool Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
           // st is already the new state here, whose key is overwritten with k below:
           // the pool change must go into k.
           k ^= Zobrist::psqDark[capPiece][restPieces[them].countType(type_of(capPiece))];
+          st->pawnKey ^= Zobrist::psqDark[capPiece][restPieces[them].countType(type_of(capPiece))];
           reprice_dark(them, evgThemOld);
       }
 
       // Update hash key
       k ^= Zobrist::psq[captured][capsq];
+      toggle_structure_keys(st, captured, capsq);
       st->materialKey ^= Zobrist::psq[captured][pieceCount[captured]];
       prefetch(thisThread->materialTable[st->materialKey]);
   }
   // Update hash key
   k ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][to];
+  toggle_structure_keys(st, pc, from);
+  toggle_structure_keys(st, pc, to);
 
   // Move the piece.
   move_piece(from, to);

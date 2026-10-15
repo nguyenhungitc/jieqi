@@ -194,6 +194,52 @@ namespace {
     return VALUE_DRAW - 1 + Value(thisThread->nodes & 0x2);
   }
 
+  // Correction history (from Pikafish, same weights): the static evaluation is
+  // corrected by what the search found in positions with the same structure keys
+  // and after the same moves. The TT keeps the uncorrected evaluation.
+  int correction_value(const Thread* th, const Position& pos, const Stack* ss) {
+    constexpr uint64_t Mask = CORRECTION_HISTORY_SIZE - 1;
+    const Color us = pos.side_to_move();
+    const Move  m  = (ss - 1)->currentMove;
+    const int pcv   = th->pawnCorrectionHistory[us][pos.pawn_key() & Mask];
+    const int micv  = th->minorPieceCorrectionHistory[us][pos.minor_piece_key() & Mask];
+    const int wnpcv = th->nonPawnCorrectionHistory[WHITE][us][pos.non_pawn_key(WHITE) & Mask];
+    const int bnpcv = th->nonPawnCorrectionHistory[BLACK][us][pos.non_pawn_key(BLACK) & Mask];
+    int cntcv = 90287;
+    if (is_ok(m))
+    {
+        const Square to = to_sq(m);
+        const Piece  pc = pos.piece_on(to);
+        cntcv =  8006 * ((*(ss - 2)->continuationCorrectionHistory)[pc][to]
+                       + (*(ss - 4)->continuationCorrectionHistory)[pc][to])
+               + 6403 *   (*(ss - 6)->continuationCorrectionHistory)[pc][to];
+    }
+    return 4136 * pcv + 3448 * micv + 7512 * (wnpcv + bnpcv) + cntcv;
+  }
+
+  // The corrected evaluation never reaches the mate range.
+  Value to_corrected_static_eval(Value v, int cv) {
+    return std::clamp(Value(v + cv / 131072), VALUE_MATED_IN_MAX_PLY + 1, VALUE_MATE_IN_MAX_PLY - 1);
+  }
+
+  void update_correction_history(const Position& pos, Stack* ss, Thread* th, int bonus) {
+    constexpr uint64_t Mask = CORRECTION_HISTORY_SIZE - 1;
+    const Color us = pos.side_to_move();
+    const Move  m  = (ss - 1)->currentMove;
+    th->pawnCorrectionHistory[us][pos.pawn_key() & Mask] << bonus;
+    th->minorPieceCorrectionHistory[us][pos.minor_piece_key() & Mask] << bonus * 146 / 128;
+    th->nonPawnCorrectionHistory[WHITE][us][pos.non_pawn_key(WHITE) & Mask] << bonus * 125 / 128;
+    th->nonPawnCorrectionHistory[BLACK][us][pos.non_pawn_key(BLACK) & Mask] << bonus * 125 / 128;
+    if (is_ok(m))
+    {
+        const Square to = to_sq(m);
+        const Piece  pc = pos.piece_on(to);
+        (*(ss - 2)->continuationCorrectionHistory)[pc][to] << bonus * 131 / 128;
+        (*(ss - 4)->continuationCorrectionHistory)[pc][to] << bonus * 63 / 128;
+        (*(ss - 6)->continuationCorrectionHistory)[pc][to] << bonus * 35 / 128;
+    }
+  }
+
   template <NodeType nodeType>
   Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, bool cutNode);
 
@@ -393,6 +439,7 @@ void Thread::search() {
   for (int i = 7; i > 0; i--)
   {
       (ss-i)->continuationHistory = &this->continuationHistory[0][0][NO_PIECE][0]; // Use as a sentinel
+      (ss-i)->continuationCorrectionHistory = &this->continuationCorrectionHistory[NO_PIECE][0];
       (ss-i)->staticEval = VALUE_NONE;
   }
   
@@ -643,6 +690,8 @@ namespace {
     bool capture, moveCountPruning, ttCapture;
     Piece movedPiece;
     int moveCount, captureCount, quietCount, improvement, complexity;
+    Value unadjustedStaticEval = VALUE_NONE;
+    int correctionValue;
 
     // Step 1. Initialize node
     Thread* thisThread = pos.this_thread();
@@ -759,6 +808,8 @@ namespace {
 
     CapturePieceToHistory& captureHistory = thisThread->captureHistory;
 
+    correctionValue = correction_value(thisThread, pos, ss);
+
     // Step 5. Static evaluation of the position
     if (ss->inCheck)
     {
@@ -772,11 +823,13 @@ namespace {
     else if (ss->ttHit)
     {
         // Never assume anything about values stored in TT
-        ss->staticEval = eval = tte->eval();
-        if (eval == VALUE_NONE)
-            ss->staticEval = eval = evaluate(pos, &complexity);
+        unadjustedStaticEval = tte->eval();
+        if (unadjustedStaticEval == VALUE_NONE)
+            unadjustedStaticEval = evaluate(pos, &complexity);
         else // Material complexity, as Eval::evaluate() returns it
-            complexity = abs(ss->staticEval - pos.material_diff());
+            complexity = abs(unadjustedStaticEval - pos.material_diff());
+
+        ss->staticEval = eval = to_corrected_static_eval(unadjustedStaticEval, correctionValue);
 
         // ttValue can be used as a better position evaluation (~4 Elo)
         if (    ttValue != VALUE_NONE
@@ -785,11 +838,12 @@ namespace {
     }
     else
     {
-        ss->staticEval = eval = evaluate(pos, &complexity);
+        unadjustedStaticEval = evaluate(pos, &complexity);
+        ss->staticEval = eval = to_corrected_static_eval(unadjustedStaticEval, correctionValue);
 
-        // Save static evaluation into transposition table
+        // Save the uncorrected static evaluation into transposition table
         if (!excludedMove)
-            tte->save(posKey, VALUE_NONE, ss->ttPv, BOUND_NONE, DEPTH_NONE, MOVE_NONE, eval);
+            tte->save(posKey, VALUE_NONE, ss->ttPv, BOUND_NONE, DEPTH_NONE, MOVE_NONE, unadjustedStaticEval);
     }
 
     thisThread->complexityAverage.update(complexity);
@@ -851,6 +905,7 @@ namespace {
 
         ss->currentMove = MOVE_NULL;
         ss->continuationHistory = &thisThread->continuationHistory[0][0][NO_PIECE][0];
+        ss->continuationCorrectionHistory = &thisThread->continuationCorrectionHistory[NO_PIECE][0];
 
         pos.do_null_move(st);
 
@@ -916,6 +971,8 @@ namespace {
                                                                           [true]
                                                                           [pos.moved_piece(move)]
                                                                           [to_sq(move)];
+                ss->continuationCorrectionHistory = &thisThread->continuationCorrectionHistory[pos.moved_piece(move)]
+                                                                                              [to_sq(move)];
                 
                 if(pos.do_move_temp(move, st)){
                     StateInfo darkSt;
@@ -965,7 +1022,7 @@ namespace {
                 if (value >= probCutBeta)
                 {
                     // Save ProbCut data into transposition table
-                    tte->save(posKey, value_to_tt(value, ss->ply), ss->ttPv, BOUND_LOWER, depth - 3, move, ss->staticEval);
+                    tte->save(posKey, value_to_tt(value, ss->ply), ss->ttPv, BOUND_LOWER, depth - 3, move, unadjustedStaticEval);
                     return value;
                 }
             }
@@ -1224,6 +1281,7 @@ moves_loop: // When in check, search starts here
                                                                 [capture]
                                                                 [movedPiece]
                                                                 [to_sq(move)];
+      ss->continuationCorrectionHistory = &thisThread->continuationCorrectionHistory[movedPiece][to_sq(move)];
 
       // Step 15. Make the move
       //pos.do_move(move, st, givesCheck);
@@ -1541,7 +1599,18 @@ dark_undo:
         tte->save(posKey, value_to_tt(bestValue, ss->ply), ss->ttPv,
                   bestValue >= beta ? BOUND_LOWER :
                   PvNode && bestMove ? BOUND_EXACT : BOUND_UPPER,
-                  depth, bestMove, ss->staticEval);
+                  depth, bestMove, unadjustedStaticEval);
+
+    // Update the correction history when the best move is not a capture and the
+    // error points the same way as the bound (from Pikafish).
+    if (   !ss->inCheck
+        && !(bestMove && pos.capture(bestMove))
+        && (bestValue > ss->staticEval) == bool(bestMove))
+    {
+        int bonus = std::clamp(int(bestValue - ss->staticEval) * depth * (bestMove ? 12 : 17) / 128,
+                               -CORRECTION_HISTORY_LIMIT / 4, CORRECTION_HISTORY_LIMIT / 4);
+        update_correction_history(pos, ss, thisThread, 1091 * bonus / 1024);
+    }
 
     assert(bestValue > -VALUE_INFINITE && bestValue < VALUE_INFINITE);
     return bestValue;
@@ -1571,6 +1640,7 @@ dark_undo:
     Value bestValue, value, ttValue, futilityValue, futilityBase;
     bool pvHit, givesCheck, capture;
     int moveCount;
+    Value unadjustedStaticEval = VALUE_NONE;
 
     if (PvNode)
     {
@@ -1620,22 +1690,29 @@ dark_undo:
     }
     else
     {
+        const int correctionValue = correction_value(thisThread, pos, ss);
+
         if (ss->ttHit)
         {
             // Never assume anything about values stored in TT
-            if ((ss->staticEval = bestValue = tte->eval()) == VALUE_NONE)
-                ss->staticEval = bestValue = evaluate(pos);
+            if ((unadjustedStaticEval = tte->eval()) == VALUE_NONE)
+                unadjustedStaticEval = evaluate(pos);
+            ss->staticEval = bestValue = to_corrected_static_eval(unadjustedStaticEval, correctionValue);
 
             // ttValue can be used as a better position evaluation (~7 Elo)
             if (    ttValue != VALUE_NONE
                 && (tte->bound() & (ttValue > bestValue ? BOUND_LOWER : BOUND_UPPER)))
                 bestValue = ttValue;
         }
+        else if ((ss-1)->currentMove != MOVE_NULL)
+        {
+            unadjustedStaticEval = evaluate(pos);
+            ss->staticEval = bestValue = to_corrected_static_eval(unadjustedStaticEval, correctionValue);
+        }
         else
             // In case of null move search use previous static eval with a different sign
-            ss->staticEval = bestValue =
-            (ss-1)->currentMove != MOVE_NULL ? evaluate(pos)
-                                             : -(ss-1)->staticEval;
+            // (already corrected; nothing uncorrected to store in the TT)
+            ss->staticEval = bestValue = -(ss-1)->staticEval;
 
         // Stand pat. Return immediately if static value is at least beta
         if (bestValue >= beta)
@@ -1643,7 +1720,7 @@ dark_undo:
             // Save gathered info in transposition table
             if (!ss->ttHit)
                 tte->save(posKey, value_to_tt(bestValue, ss->ply), false, BOUND_LOWER,
-                          DEPTH_NONE, MOVE_NONE, ss->staticEval);
+                          DEPTH_NONE, MOVE_NONE, unadjustedStaticEval);
 
             return bestValue;
         }
@@ -1726,6 +1803,8 @@ dark_undo:
                                                                 [capture]
                                                                 [pos.moved_piece(move)]
                                                                 [to_sq(move)];
+      ss->continuationCorrectionHistory = &thisThread->continuationCorrectionHistory[pos.moved_piece(move)]
+                                                                                    [to_sq(move)];
 
       // Continuation history based pruning (~2 Elo)
       if (   !capture
@@ -1816,7 +1895,7 @@ dark_undo:
     // Save gathered info in transposition table
     tte->save(posKey, value_to_tt(bestValue, ss->ply), pvHit,
               bestValue >= beta ? BOUND_LOWER : BOUND_UPPER,
-              ttDepth, bestMove, ss->staticEval);
+              ttDepth, bestMove, unadjustedStaticEval);
 
     assert(bestValue > -VALUE_INFINITE && bestValue < VALUE_INFINITE);
 
