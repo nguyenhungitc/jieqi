@@ -54,6 +54,8 @@ struct StateInfo {
   Value  material[COLOR_NB];
   int    pliesFromNull;
   int    pliesFromIrreversible; // plies since the last capture or reveal
+  int    rule60;                // plies counted by the 60-move rule
+  int    check10[COLOR_NB];     // checks given by each side since the last reset
   int        darkDepth;
   int        darkTypes;
 
@@ -168,6 +170,7 @@ public:
   // Accessing hash keys
   Key key() const;
   Key key_after(Move m) const;
+  Key adjust_key60(Key k) const;
   Key material_key() const;
 
   // Other properties of the position
@@ -175,6 +178,7 @@ public:
   int game_ply() const;
   Thread* this_thread() const;
   bool is_repeated(Value& result, int ply = 0) const;
+  int rule60_count() const;
   ChaseMap chased(Color c);
   Score psq_score() const;
   Value material_sum() const;
@@ -351,8 +355,22 @@ inline Bitboard Position::check_squares(PieceType pt) const {
   return st->checkSquares[pt];
 }
 
+// The TT key. It differs from st->key, which repetition detection uses, in two
+// ways (from Pikafish, against the graph history interaction): positions whose
+// 60-move counter is high get a key per 8-ply bucket, so that results which depend
+// on the counter are not mixed, and a position that may have occurred earlier in
+// the game (bloom filter hit) gets a key of its own.
+inline Key Position::adjust_key60(Key k) const {
+  return (st->rule60 < 14 ? k : k ^ make_key((st->rule60 - 14) / 8))
+       ^ (filter[k] ? make_key(14) : 0);
+}
+
 inline Key Position::key() const {
-  return st->key;
+  return adjust_key60(st->key);
+}
+
+inline int Position::rule60_count() const {
+  return st->rule60;
 }
 
 inline Key Position::material_key() const {

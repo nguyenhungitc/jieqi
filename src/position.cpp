@@ -28,6 +28,7 @@
 
 #include "bitboard.h"
 #include "misc.h"
+#include "movegen.h"
 #include "position.h"
 #include "thread.h"
 #include "tt.h"
@@ -245,10 +246,12 @@ Position& Position::set(const string& fenStr, StateInfo* si, Thread* th) {
       put_piece(putPieces.at(i).first, putPieces.at(i).second);
   }
 
-  // 4-5. Halfmove clock (not used) and fullmove number; extra "-" fields of a
-  // standard xiangqi FEN ("w - - 0 1") are skipped.
+  // 4-5. Halfmove clock (the 60-move rule counter, 0..119) and fullmove number;
+  // extra "-" fields of a standard xiangqi FEN ("w - - 0 1") are skipped.
   while (k < rest.size() && rest[k] == "-")
       ++k;
+  if (k < rest.size())
+      st->rule60 = std::clamp(atoi(rest[k].c_str()), 0, 119);
   gamePly = 1;
   if (k + 1 < rest.size())
       gamePly = atoi(rest[k + 1].c_str());
@@ -516,7 +519,7 @@ string Position::fen() const {
   }
   if (emptyPool)
       ss << '-';
-  ss << " " << 0 << " " << 1 + (gamePly - (sideToMove == BLACK)) / 2;
+  ss << " " << st->rule60 << " " << 1 + (gamePly - (sideToMove == BLACK)) / 2;
 
   return ss.str();
 }
@@ -878,6 +881,17 @@ bool Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
   ++gamePly;
   ++st->pliesFromNull;
 
+  // 60-move rule counter (from Pikafish): a side's checks beyond 10 since the last
+  // reset do not count, nor do the replies to them. Reset below on a capture or a
+  // reveal.
+  if (!givesCheck || ++st->check10[sideToMove] <= 10)
+  {
+      if (st->check10[~sideToMove] > 10 && st->previous->checkersBB)
+          ++st->check10[~sideToMove];
+      else
+          ++st->rule60;
+  }
+
   Color us = sideToMove;
   Color them = ~us;
 
@@ -887,6 +901,12 @@ bool Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
   // A capture or a reveal (a dark move, or a face-down piece the GUI revealed) can
   // never be undone: no position before it can come back.
   st->pliesFromIrreversible = (captured || dark || to_pc) ? 0 : st->pliesFromIrreversible + 1;
+
+  // The 60-move rule restarts after a capture and, in this implementation, after a
+  // reveal too: both are progress that cannot be undone. Drop "dark || to_pc" here
+  // if the rules in use only count captures.
+  if (captured || dark || to_pc)
+      st->rule60 = st->check10[WHITE] = st->check10[BLACK] = 0;
 
   assert(color_of(pc) == us);
   assert(captured == NO_PIECE || color_of(captured) == them);
@@ -1392,8 +1412,9 @@ ChaseMap Position::chased(Color c) {
 }
 
 
-/// Position::is_repeated() tests whether the position may end the game by draw repetition, perpetual
-/// check repetition or perpetual chase repetition that allows a player to claim a game result.
+/// Position::is_repeated() tests whether the position ends the game: draw by repetition, perpetual
+/// check or perpetual chase repetition that allows a player to claim a game result, or the 60-move
+/// rule.
 
 bool Position::is_repeated(Value& result, int ply) const {
 
@@ -1401,65 +1422,72 @@ bool Position::is_repeated(Value& result, int ply) const {
     // to go back to the last null move, i.e. through the whole game history.
     const int end = std::min(st->pliesFromIrreversible, st->pliesFromNull);
 
-    if (end < 4 || !filter[st->key])
-        return false;
-
-    int cnt = 0;
-    StateInfo* stp = st->previous->previous;
-    bool perpetualThem = st->checkersBB && stp->checkersBB;
-    bool perpetualUs = st->previous->checkersBB && stp->previous->checkersBB;
-
-    for (int i = 4; i <= end; i += 2)
+    if (end >= 4 && filter[st->key])
     {
-        stp = stp->previous->previous;
-        perpetualThem &= bool(stp->checkersBB);
+        int cnt = 0;
+        StateInfo* stp = st->previous->previous;
+        bool perpetualThem = st->checkersBB && stp->checkersBB;
+        bool perpetualUs = st->previous->checkersBB && stp->previous->checkersBB;
 
-        // Return a score if the position repeats once strictly after the root, or
-        // twice: a single repetition of a position played before the root is not a
-        // result yet (the game can continue differently from the root).
-        if (stp->key == st->key && (++cnt == 2 || ply > i))
+        for (int i = 4; i <= end; i += 2)
         {
-            if (perpetualThem || perpetualUs)
+            stp = stp->previous->previous;
+            perpetualThem &= bool(stp->checkersBB);
+
+            // Return a score if the position repeats once strictly after the root, or
+            // twice: a single repetition of a position played before the root is not a
+            // result yet (the game can continue differently from the root).
+            if (stp->key == st->key && (++cnt == 2 || ply > i))
             {
-                result = !perpetualUs ? mate_in(ply) : !perpetualThem ? mated_in(ply) : VALUE_DRAW;
-                return true;
-            }
-
-            // Copy the current position to a rollback struct, so we don't need to do those moves again
-            Position rollback;
-            memcpy((void *)&rollback, (const void *)this, offsetof(Position, filter));
-
-            // Set up chase information: chase[k] belongs to the state k plies back.
-            // Kept local so that the shared pre-root states are never written.
-            std::vector<uint16_t> chase(i);
-            rollback.set_chase_info(i, chase.data());
-
-            // Chasing detection
-            stp = st->previous->previous;
-            uint16_t chaseThem = chase[0] & chase[2];
-            uint16_t chaseUs = chase[1] & chase[3];
-
-            for (int j = 4; j <= i; j += 2)
-            {
-                // Chase stops after i moves
-                if (j != i)
-                    chaseThem &= chase[j];
-                stp = stp->previous->previous;
-
-                // Return a score if a position repeats once earlier.
-                if (stp->key == st->key)
+                if (perpetualThem || perpetualUs)
                 {
-                    result = (chaseThem || chaseUs) ? (!chaseUs ? mate_in(ply) : !chaseThem ? mated_in(ply) : VALUE_DRAW) : VALUE_DRAW;
+                    result = !perpetualUs ? mate_in(ply) : !perpetualThem ? mated_in(ply) : VALUE_DRAW;
                     return true;
                 }
 
-                if (j + 1 <= i)
-                    chaseUs &= chase[j + 1];
-            }
-        }
+                // Copy the current position to a rollback struct, so we don't need to do those moves again
+                Position rollback;
+                memcpy((void *)&rollback, (const void *)this, offsetof(Position, filter));
 
-        if (i + 1 <= end)
-            perpetualUs &= bool(stp->previous->checkersBB);
+                // Set up chase information: chase[k] belongs to the state k plies back.
+                // Kept local so that the shared pre-root states are never written.
+                std::vector<uint16_t> chase(i);
+                rollback.set_chase_info(i, chase.data());
+
+                // Chasing detection
+                stp = st->previous->previous;
+                uint16_t chaseThem = chase[0] & chase[2];
+                uint16_t chaseUs = chase[1] & chase[3];
+
+                for (int j = 4; j <= i; j += 2)
+                {
+                    // Chase stops after i moves
+                    if (j != i)
+                        chaseThem &= chase[j];
+                    stp = stp->previous->previous;
+
+                    // Return a score if a position repeats once earlier.
+                    if (stp->key == st->key)
+                    {
+                        result = (chaseThem || chaseUs) ? (!chaseUs ? mate_in(ply) : !chaseThem ? mated_in(ply) : VALUE_DRAW) : VALUE_DRAW;
+                        return true;
+                    }
+
+                    if (j + 1 <= i)
+                        chaseUs &= chase[j + 1];
+                }
+            }
+
+            if (i + 1 <= end)
+                perpetualUs &= bool(stp->previous->checkersBB);
+        }
+    }
+
+    // 60-move rule: a draw, unless the side to move is mated.
+    if (st->rule60 >= 120)
+    {
+        result = MoveList<LEGAL>(*this).size() ? VALUE_DRAW : mated_in(ply);
+        return true;
     }
 
     return false;

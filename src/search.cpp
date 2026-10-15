@@ -201,7 +201,7 @@ namespace {
   Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth = 0);
 
   Value value_to_tt(Value v, int ply);
-  Value value_from_tt(Value v, int ply);
+  Value value_from_tt(Value v, int ply, int r60c);
   void update_pv(Move* pv, Move move, const Move* childPv);
   void update_continuation_histories(Stack* ss, Piece pc, Square to, int bonus);
   void update_quiet_stats(const Position& pos, Stack* ss, Move move, int bonus);
@@ -716,7 +716,7 @@ namespace {
     excludedMove = ss->excludedMove;
     posKey = excludedMove == MOVE_NONE ? pos.key() : pos.key() ^ make_key(excludedMove);
     tte = TT.probe(posKey, ss->ttHit);
-    ttValue = ss->ttHit ? value_from_tt(tte->value(), ss->ply) : VALUE_NONE;
+    ttValue = ss->ttHit ? value_from_tt(tte->value(), ss->ply, pos.rule60_count()) : VALUE_NONE;
     ttMove =  rootNode ? thisThread->rootMoves[thisThread->pvIdx].pv[0]
             : ss->ttHit    ? tte->move() : MOVE_NONE;
     ttCapture = ttMove && pos.capture(ttMove);
@@ -724,8 +724,11 @@ namespace {
         ss->ttPv = PvNode || (ss->ttHit && tte->is_pv());
 
     // At non-PV nodes we check for an early TT cutoff
+    // (No cutoff with a high 60-move counter: the stored value may come from a
+    // position further from the draw, the graph history interaction.)
     if (  !PvNode
         && ss->ttHit
+        && pos.rule60_count() < 116
         && tte->depth() > depth - (tte->bound() == BOUND_EXACT)
         && ttValue != VALUE_NONE // Possible in case of TT access race
         && (tte->bound() & (ttValue >= beta ? BOUND_LOWER : BOUND_UPPER)))
@@ -1598,7 +1601,7 @@ dark_undo:
     // Transposition table lookup
     posKey = pos.key();
     tte = TT.probe(posKey, ss->ttHit);
-    ttValue = ss->ttHit ? value_from_tt(tte->value(), ss->ply) : VALUE_NONE;
+    ttValue = ss->ttHit ? value_from_tt(tte->value(), ss->ply, pos.rule60_count()) : VALUE_NONE;
     ttMove = ss->ttHit ? tte->move() : MOVE_NONE;
     pvHit = ss->ttHit && tte->is_pv();
 
@@ -1838,16 +1841,19 @@ dark_undo:
   // the transposition table (which refers to the plies to mate/be mated from
   // current position) to "plies to mate/be mated from the root"..
 
-  Value value_from_tt(Value v, int ply) {
+  // A mate that takes longer than the plies left before the 60-move rule ends the
+  // game may be false (and the TT entry may come from a position with a lower
+  // counter): it is downgraded to the best non-mate score. From Pikafish.
+  Value value_from_tt(Value v, int ply, int r60c) {
 
     if (v == VALUE_NONE)
         return VALUE_NONE;
 
     if (v >= VALUE_MATE_IN_MAX_PLY)  // win
-        return v - ply;
+        return VALUE_MATE - v > 120 - r60c ? VALUE_MATE_IN_MAX_PLY - 1 : v - ply;
 
     if (v <= VALUE_MATED_IN_MAX_PLY) // loss
-        return v + ply;
+        return VALUE_MATE + v > 120 - r60c ? VALUE_MATED_IN_MAX_PLY + 1 : v + ply;
 
     return v;
   }
