@@ -884,6 +884,10 @@ bool Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
   Piece pc = piece_on(from);
   Piece captured = piece_on(to);
 
+  // A capture or a reveal (a dark move, or a face-down piece the GUI revealed) can
+  // never be undone: no position before it can come back.
+  st->pliesFromIrreversible = (captured || dark || to_pc) ? 0 : st->pliesFromIrreversible + 1;
+
   assert(color_of(pc) == us);
   assert(captured == NO_PIECE || color_of(captured) == them);
   if (type_of(captured) == KING) {
@@ -1393,20 +1397,27 @@ ChaseMap Position::chased(Color c) {
 
 bool Position::is_repeated(Value& result, int ply) const {
 
-    if (st->pliesFromNull < 4 || !filter[st->key])
+    // Only the positions since the last capture or reveal can repeat: the scan used
+    // to go back to the last null move, i.e. through the whole game history.
+    const int end = std::min(st->pliesFromIrreversible, st->pliesFromNull);
+
+    if (end < 4 || !filter[st->key])
         return false;
 
+    int cnt = 0;
     StateInfo* stp = st->previous->previous;
     bool perpetualThem = st->checkersBB && stp->checkersBB;
     bool perpetualUs = st->previous->checkersBB && stp->previous->checkersBB;
 
-    for (int i = 4; i <= st->pliesFromNull; i += 2)
+    for (int i = 4; i <= end; i += 2)
     {
         stp = stp->previous->previous;
         perpetualThem &= bool(stp->checkersBB);
 
-        // Return a score if a position repeats once earlier.
-        if (stp->key == st->key)
+        // Return a score if the position repeats once strictly after the root, or
+        // twice: a single repetition of a position played before the root is not a
+        // result yet (the game can continue differently from the root).
+        if (stp->key == st->key && (++cnt == 2 || ply > i))
         {
             if (perpetualThem || perpetualUs)
             {
@@ -1447,7 +1458,7 @@ bool Position::is_repeated(Value& result, int ply) const {
             }
         }
 
-        if (i + 1 <= st->pliesFromNull)
+        if (i + 1 <= end)
             perpetualUs &= bool(stp->previous->checkersBB);
     }
 

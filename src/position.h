@@ -53,6 +53,7 @@ struct StateInfo {
   Key    materialKey;
   Value  material[COLOR_NB];
   int    pliesFromNull;
+  int    pliesFromIrreversible; // plies since the last capture or reveal
   int        darkDepth;
   int        darkTypes;
 
