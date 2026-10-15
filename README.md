@@ -3,7 +3,7 @@
 Jieqi is a UCI engine for jieqi (揭棋, xiangqi with face-down pieces). It uses a
 classical hand-written evaluation and no neural network. It is based on the jieqi engine of
 Pikafish's `jieqi_old` branch, with a series of correctness fixes on top. For the NNUE
-engine, see [Maskfish](https://github.com/official-maskfish/maskfish).
+engine, see [Maskfish](https://github.com/nguyenhungitc/maskfish).
 
 Every fix addresses a defect that was reproduced and measured before and after the change.
 Each commit message describes the defect, how it was measured and the effect of the fix. The
