@@ -62,8 +62,10 @@ MovePicker::MovePicker(const Position& p, Move ttm, Depth d, const ButterflyHist
                                                              const CapturePieceToHistory* cph,
                                                              const PieceToHistory** ch,
                                                              Move cm,
-                                                             const Move* killers)
-           : pos(p), mainHistory(mh), captureHistory(cph), continuationHistory(ch),
+                                                             const Move* killers,
+                                                             const LowPlyHistory* lph,
+                                                             int pl)
+           : pos(p), mainHistory(mh), lowPlyHistory(lph), ply(pl), captureHistory(cph), continuationHistory(ch),
              ttMove(ttm), refutations{{killers[0], 0}, {killers[1], 0}, {cm, 0}}, depth(d)
 {
   assert(d > 0);
@@ -143,7 +145,9 @@ void MovePicker::score() {
                           :                                   !(to_sq(m) & threatenedByPawn)     ? 15000
                           :                                                                        0)
                           :                                                                        0)
-                   +     bool(pos.check_squares(type_of(pos.moved_piece(m))) & to_sq(m)) * 16384;
+                   +     bool(pos.check_squares(type_of(pos.moved_piece(m))) & to_sq(m)) * 16384
+                   +     (lowPlyHistory && ply < LOW_PLY_HISTORY_SIZE
+                          ? 8 * (*lowPlyHistory)[ply][from_to(m)] / (1 + ply) : 0);
       else // Type == EVASIONS
       {
           if (pos.capture(m))

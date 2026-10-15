@@ -90,6 +90,11 @@ enum StatsType { NoCaptures, Captures };
 /// (~11 elo)
 typedef Stats<int16_t, 7183, COLOR_NB, 1 << 14> ButterflyHistory;
 
+/// LowPlyHistory is a ButterflyHistory for the first plies of the search, where
+/// move ordering matters most; it is reset at every new search (from Pikafish).
+constexpr int LOW_PLY_HISTORY_SIZE = 5;
+typedef Stats<int16_t, 7183, LOW_PLY_HISTORY_SIZE, 1 << 14> LowPlyHistory;
+
 /// CounterMoveHistory stores counter moves indexed by [piece][to] of the previous
 /// move, see www.chessprogramming.org/Countermove_Heuristic
 typedef Stats<Move, NOT_USED, PIECE_NB, SQUARE_NB> CounterMoveHistory;
@@ -134,7 +139,9 @@ public:
                                            const CapturePieceToHistory*,
                                            const PieceToHistory**,
                                            Move,
-                                           const Move*);
+                                           const Move*,
+                                           const LowPlyHistory* = nullptr,
+                                           int = LOW_PLY_HISTORY_SIZE);
   MovePicker(const Position&, Move, Depth, const ButterflyHistory*,
                                            const CapturePieceToHistory*,
                                            const PieceToHistory**,
@@ -150,6 +157,8 @@ private:
 
   const Position& pos;
   const ButterflyHistory* mainHistory;
+  const LowPlyHistory* lowPlyHistory = nullptr;
+  int ply = LOW_PLY_HISTORY_SIZE;
   const CapturePieceToHistory* captureHistory;
   const PieceToHistory** continuationHistory;
   Move ttMove;

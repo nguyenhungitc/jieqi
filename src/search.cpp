@@ -467,6 +467,13 @@ void Thread::search() {
 
   complexityAverage.set(comp_1, 1);
 
+  // History of the previous search: low-ply history restarts, the main history
+  // fades (from Pikafish).
+  lowPlyHistory.fill(99);
+  for (Color c : { WHITE, BLACK })
+      for (int i = 0; i < (1 << 14); ++i)
+          mainHistory[c][i] = int16_t(mainHistory[c][i] * 747 / 1024);
+
   optimism[us] = optimism[~us] = VALUE_ZERO;
 
   int searchAgainCounter = 0;
@@ -1093,7 +1100,9 @@ moves_loop: // When in check, search starts here
                                       &captureHistory,
                                       contHist,
                                       countermove,
-                                      ss->killers);
+                                      ss->killers,
+                                      &thisThread->lowPlyHistory,
+                                      ss->ply);
 
     value = bestValue;
     moveCountPruning = singularQuietLMR = false;
@@ -1985,6 +1994,8 @@ dark_undo:
         for (int i = 0; i < quietCount; ++i)
         {
             thisThread->mainHistory[us][from_to(quietsSearched[i])] << -bonus2;
+            if (ss->ply < LOW_PLY_HISTORY_SIZE)
+                thisThread->lowPlyHistory[ss->ply][from_to(quietsSearched[i])] << -bonus2 * 700 / 1024;
             update_continuation_histories(ss, pos.moved_piece(quietsSearched[i]), to_sq(quietsSearched[i]), -bonus2);
         }
     }
@@ -2038,6 +2049,8 @@ dark_undo:
     Color us = pos.side_to_move();
     Thread* thisThread = pos.this_thread();
     thisThread->mainHistory[us][from_to(move)] << bonus;
+    if (ss->ply < LOW_PLY_HISTORY_SIZE)
+        thisThread->lowPlyHistory[ss->ply][from_to(move)] << bonus * 700 / 1024;
     update_continuation_histories(ss, pos.moved_piece(move), to_sq(move), bonus);
 
     // Update countermove history
