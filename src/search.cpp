@@ -235,6 +235,32 @@ namespace {
     return nodes;
   }
 
+  // first_dark_move() returns the index of the first move of 'pv' that moves a
+  // face-down piece (or that is not a real move), pv.size() if there is none.
+  // Such a move reveals an identity the GUI does not know yet, so it can only be
+  // sent as the last move of a PV and never as a ponder move. A face-down piece
+  // only leaves its square by a dark move, so following the face-down squares
+  // through the face-up moves before it is enough: a face-up move only removes a
+  // face-down piece by capturing it.
+  size_t first_dark_move(const Position& pos, const std::vector<Move>& pv) {
+
+    Bitboard dark = 0;
+    for (Bitboard b = pos.pieces(); b; )
+    {
+        Square s = pop_lsb(b);
+        if (pos.isDark(s))
+            dark |= s;
+    }
+
+    for (size_t i = 0; i < pv.size(); ++i)
+    {
+        if (!is_ok(pv[i]) || (dark & from_sq(pv[i])))
+            return i;
+        dark &= ~square_bb(to_sq(pv[i]));
+    }
+    return pv.size();
+  }
+
 } // namespace
 
 
@@ -327,10 +353,17 @@ void MainThread::search() {
   if (bestThread != this)
       sync_cout << UCI::pv(bestThread->rootPos, bestThread->completedDepth, -VALUE_INFINITE, VALUE_INFINITE) << sync_endl;
 
-  sync_cout << "bestmove " << UCI::move(bestThread->rootMoves[0].pv[0]);
+  RootMove& bestRootMove = bestThread->rootMoves[0];
 
-  if (bestThread->rootMoves[0].pv.size() > 1 || bestThread->rootMoves[0].extract_ponder_from_tt(rootPos))
-      std::cout << " ponder " << UCI::move(bestThread->rootMoves[0].pv[1]);
+  sync_cout << "bestmove " << UCI::move(bestRootMove.pv[0]);
+
+  // No ponder move if the best move or the reply moves a face-down piece: the GUI
+  // sends both back in "position ... moves" without the revealed identity, which
+  // parse_move() rejects, so the engine pondered (and on ponderhit answered) the
+  // position before its own move.
+  if (   (bestRootMove.pv.size() > 1 || bestRootMove.extract_ponder_from_tt(rootPos))
+      && first_dark_move(rootPos, bestRootMove.pv) > 1)
+      std::cout << " ponder " << UCI::move(bestRootMove.pv[1]);
 
   std::cout << sync_endl;
 }
@@ -1993,8 +2026,12 @@ string UCI::pv(const Position& pos, Depth depth, Value alpha, Value beta) {
          << " time "     << elapsed
          << " pv";
 
-      for (Move m : rootMoves[i].pv)
-          ss << " " << UCI::move(m);
+      // The PV stops after its first face-down move: the moves after it answer one
+      // particular identity, and a GUI cannot replay them.
+      const std::vector<Move>& line = rootMoves[i].pv;
+      size_t lineLength = std::min(line.size(), first_dark_move(pos, line) + 1);
+      for (size_t j = 0; j < lineLength; ++j)
+          ss << " " << UCI::move(line[j]);
   }
 
   return ss.str();
@@ -2014,7 +2051,9 @@ bool RootMove::extract_ponder_from_tt(Position& pos) {
 
     assert(pv.size() == 1);
 
-    if (pv[0] == MOVE_NONE)
+    // After a face-down move the position depends on the identity: the TT holds
+    // nothing for the unrevealed position, and no ponder move can be sent anyway.
+    if (pv[0] == MOVE_NONE || pos.isDark(from_sq(pv[0])))
         return false;
 
     pos.do_move_temp(pv[0], st);
