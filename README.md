@@ -7,7 +7,8 @@ engine, see [Maskfish](https://github.com/nguyenhungitc/maskfish).
 
 Every fix addresses a defect that was reproduced and measured before and after the change.
 Each commit message describes the defect, how it was measured and the effect of the fix. The
-measurement scripts and raw results are not part of this repository.
+measurement scripts and raw results are not part of this repository, except the match
+runner `tests/match.py`.
 
 ## Base
 
@@ -39,12 +40,18 @@ One commit per defect, in order:
 | `684fac7f` | A move's value is its last (re-)search; `newDepth` is reset per identity |
 | `03d9dbc2` | The root PV only takes the line of the move it belongs to |
 | `057ccfd3` | GUI capture: the pool change goes into the new key |
-| `c541453` | `Reductions[]` sized for every depth (out-of-bounds read from depth 128) |
-| `6a45c85` | No `ponder` move and no PV continuation after a face-down move |
-| `afeeb8d` | bench: FENs in the format `fen_is_valid()` accepts (10 of 11 were rejected) |
-| `8db2212` | Step 10: the TT-depth reduction requires a TT hit |
-| `bef8e35` | `fen()`: an empty pool is written as `-` (`flip` misread the move counters) |
-| `1923019` | Time management: no NaN when the side to move has no time left |
+| `7959b6f` | `Reductions[]` sized for every depth (out-of-bounds read from depth 128) |
+| `0a47d93` | No `ponder` move and no PV continuation after a face-down move |
+| `4dddb93` | bench: FENs in the format `fen_is_valid()` accepts (10 of 11 were rejected) |
+| `b46eabd` | Step 10: the TT-depth reduction requires a TT hit |
+| `31231f7` | `fen()`: an empty pool is written as `-` (`flip` misread the move counters) |
+| `21e6cd7` | Time management: no NaN when the side to move has no time left |
+| `710e25b` | Repetition: scan only back to the last irreversible move; root-relative folds (Pikafish) |
+| `9cd9bd8` | 60-move rule with `check10`, mate downgrade and TT key buckets (Pikafish) |
+| `94177b6` | Correction history; the structure keys include face-down pieces and pools (Pikafish) |
+| `6caa43d` | TT replacement and aging (Pikafish) |
+| `fb003a5` | Low-ply history and main history aging (Pikafish) |
+| `4ac1f9f` | `tests/match.py`: match runner |
 
 ## Headline results
 
@@ -62,6 +69,27 @@ state with a from-scratch recomputation. The scripts are not included here.
 | Evaluations using a stale cached imbalance | 91.2% | 0 |
 | qsearch mate scores in positions with legal moves | 8,378 | 0 |
 | Exact PV scores overwritten by a lower bound | 3,099 | 0 |
+
+## Search ports from Pikafish
+
+`710e25b` to `fb003a5` port search techniques from Pikafish `master` (no NNUE). Each was
+measured with `tests/match.py`, which plays two engines through UCI and acts as the
+referee: it draws the identity of a face-down piece when it moves, from that side's pool,
+and replays every opening with colours swapped.
+
+| Match | Games | Nodes / move | Elo (95%) |
+|---|---|---|---|
+| repetition vs previous | 200 | 20000 | +20.9 [−27.0, +69.6] |
+| 60-move rule vs previous | 400 | 20000 | −13.9 [−48.1, +20.0] |
+| correction history vs previous | 400 | 20000 | +20.0 [−13.8, +54.2] |
+| TT vs previous | 400 | 20000 | +0.0 [−33.9, +33.9] |
+| repetition to TT vs `21e6cd7` | 600 | 20000 | +6.4 [−21.2, +34.1] |
+| repetition to TT vs `21e6cd7` | 200 | 80000 | **+61.4 [+14.0, +111.2]** |
+| history (`fb003a5`) vs previous | 400 | 20000 | −21.7 [−56.0, +12.1] |
+
+The history commit measured negative (an earlier run of 280 games gave −8.7 [−49.5,
++31.9]); its constants come from Pikafish and probably need tuning here. These are
+small matches at short searches; confirm with an SPRT at the time control you use.
 
 ## Behaviour changes
 
@@ -81,8 +109,15 @@ state with a from-scratch recomputation. The scripts are not included here.
   moves a face-down piece, and a PV stops after its first face-down move: neither can be
   sent back by a GUI without the identity.
 - **`fen()`** writes an empty pool as `-` instead of an empty field.
-- **Bench signature.** All 11 bench positions are searched now, so the signature differs
-  from earlier builds (14137794 with the default `bench`).
+- **Bench signature.** All 11 bench positions are searched now, and the search changes
+  below change the search: the default `bench` gives 8570091.
+- **Repetitions.** A position that occurred once at or before the root no longer ends a
+  line: it must repeat after the root, or twice.
+- **60-move rule.** The FEN halfmove clock is read and written. At 120 plies (a side's
+  checks beyond 10 do not count) the game is a draw. The counter restarts after a capture
+  and after a reveal; drop the reveal in `do_move()` if your rules only count captures.
+- **Hash key in `d`.** `Key:` is the TT key, which differs from the repetition key once
+  the 60-move counter reaches 14 or the position may have occurred before.
 
 ## Known open issues
 
@@ -99,7 +134,6 @@ These were verified but are not fixed:
 - **`go perft` does not reveal**: after a dark move the piece stays face-down off its
   starting point and keeps moving like the piece type of that point, so the counts do not
   follow jieqi rules.
-- **No 60-move rule**: the halfmove clock of a FEN is ignored.
 
 ## Build
 
