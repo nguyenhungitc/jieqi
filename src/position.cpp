@@ -943,9 +943,12 @@ bool Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
 
   assert(color_of(pc) == us);
   assert(captured == NO_PIECE || color_of(captured) == them);
-  if (type_of(captured) == KING) {
-      sync_cout << *this << sync_endl;
-  }
+  // Debugging aid for the assert below. It printed the board to stdout in release
+  // builds too, i.e. into the UCI stream, where the GUI reads it as engine output.
+#ifndef NDEBUG
+  if (type_of(captured) == KING)
+      std::cerr << *this << std::endl;
+#endif
   assert(type_of(captured) != KING);
 
   if (captured)
