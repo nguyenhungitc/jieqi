@@ -19,6 +19,8 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <cstdlib>
 #include <ostream>
 #include <sstream>
 
@@ -42,6 +44,24 @@ void on_clear_hash(const Option&) { Search::clear(); }
 void on_hash_size(const Option& o) { TT.resize(size_t(o)); }
 void on_logger(const Option& o) { start_logger(o); }
 void on_threads(const Option& o) { Threads.set(size_t(o)); }
+
+/// parse_number() reads a whole string as a finite number. std::stof() threw on
+/// anything else ("setoption name Hash value abc", or "1e40"), and the engine is
+/// built without exception handling, so the exception terminated it. strtod() does
+/// not throw; the string must be consumed entirely (leading and trailing blanks
+/// aside), so "16abc" is rejected too. A double also holds every spin value
+/// exactly, where a float rounded e.g. a Hash size of 33554431 MB.
+static bool parse_number(const string& s, double& out) {
+
+  const char* begin = s.c_str();
+  char* end = nullptr;
+  out = std::strtod(begin, &end);
+  if (end == begin || !std::isfinite(out))
+      return false;
+  while (*end == ' ' || *end == '\t')
+      ++end;
+  return *end == '\0';
+}
 
 /// Our case insensitive less() function as required by UCI protocol
 bool CaseInsensitiveLess::operator() (const string& s1, const string& s2) const {
@@ -86,8 +106,9 @@ std::ostream& operator<<(std::ostream& os, const OptionsMap& om) {
               if (o.type == "string" || o.type == "check" || o.type == "combo")
                   os << " default " << o.defaultValue;
 
+              double d = 0;
               if (o.type == "spin")
-                  os << " default " << int(stof(o.defaultValue))
+                  os << " default " << (parse_number(o.defaultValue, d) ? int(d) : 0)
                      << " min "     << o.min
                      << " max "     << o.max;
 
@@ -117,7 +138,9 @@ Option::Option(const char* v, const char* cur, OnChange f) : type("combo"), min(
 
 Option::operator double() const {
   assert(type == "check" || type == "spin");
-  return (type == "spin" ? stof(currentValue) : currentValue == "true");
+  double d = 0;
+  // currentValue of a spin option was checked by operator=() (or is the default).
+  return (type == "spin" ? (parse_number(currentValue, d) ? d : 0.0) : currentValue == "true");
 }
 
 Option::operator std::string() const {
@@ -151,9 +174,10 @@ Option& Option::operator=(const string& v) {
 
   assert(!type.empty());
 
+  double d = 0;
   if (   (type != "button" && type != "string" && v.empty())
       || (type == "check" && v != "true" && v != "false")
-      || (type == "spin" && (stof(v) < min || stof(v) > max)))
+      || (type == "spin" && (!parse_number(v, d) || d < min || d > max)))
       return *this;
 
   if (type == "combo")
