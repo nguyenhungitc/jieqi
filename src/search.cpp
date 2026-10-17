@@ -22,6 +22,7 @@
 #include <cmath>
 #include <cstring>   // For std::memset
 #include <iostream>
+#include <limits>
 #include <sstream>
 
 #include "evaluate.h"
@@ -288,7 +289,15 @@ namespace {
   // only leaves its square by a dark move, so following the face-down squares
   // through the face-up moves before it is enough: a face-up move only removes a
   // face-down piece by capturing it.
-  size_t first_dark_move(const Position& pos, const std::vector<Move>& pv) {
+  //
+  // From index 'capturesFrom' on, a move that captures a face-down piece also
+  // counts. Such a move can be sent back without the identity, but the identity
+  // becomes known when it is played: a ponder move that captures a face-down piece
+  // makes the engine ponder with that identity still in the pool, and on
+  // "ponderhit" it keeps searching that position although the real one has a
+  // smaller pool.
+  size_t first_dark_move(const Position& pos, const std::vector<Move>& pv,
+                         size_t capturesFrom = std::numeric_limits<size_t>::max()) {
 
     Bitboard dark = 0;
     for (Bitboard b = pos.pieces(); b; )
@@ -300,7 +309,7 @@ namespace {
 
     for (size_t i = 0; i < pv.size(); ++i)
     {
-        if (!is_ok(pv[i]) || (dark & from_sq(pv[i])))
+        if (!is_ok(pv[i]) || (dark & from_sq(pv[i])) || (i >= capturesFrom && (dark & to_sq(pv[i]))))
             return i;
         dark &= ~square_bb(to_sq(pv[i]));
     }
@@ -406,9 +415,13 @@ void MainThread::search() {
   // No ponder move if the best move or the reply moves a face-down piece: the GUI
   // sends both back in "position ... moves" without the revealed identity, which
   // parse_move() rejects, so the engine pondered (and on ponderhit answered) the
-  // position before its own move.
+  // position before its own move. Nor if the reply captures a face-down piece: its
+  // identity is only known once the reply is played, and after "ponderhit" the
+  // engine would go on searching with that identity still in the pool. (A capture
+  // by the best move is fine: the GUI can send its identity with the ponder
+  // position, as with any move of the game.)
   if (   (bestRootMove.pv.size() > 1 || bestRootMove.extract_ponder_from_tt(rootPos))
-      && first_dark_move(rootPos, bestRootMove.pv) > 1)
+      && first_dark_move(rootPos, bestRootMove.pv, 1) > 1)
       std::cout << " ponder " << UCI::move(bestRootMove.pv[1]);
 
   std::cout << sync_endl;
