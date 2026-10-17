@@ -2090,8 +2090,12 @@ void MainThread::check_time() {
   if (ponder)
       return;
 
-  if (   (Limits.use_time_management() && (elapsed > Time.maximum() - 10 || stopOnPonderhit))
-      || (Limits.movetime && elapsed >= Limits.movetime)
+  // The time limits only apply once depth 1 is complete (as in later Stockfish):
+  // with almost no time left ("go wtime 0 btime 0") the search stopped during the
+  // first iteration and played the first generated move, which was never searched.
+  if (   (   completedDepth >= 1
+          && (   (Limits.use_time_management() && (elapsed > Time.maximum() - 10 || stopOnPonderhit))
+              || (Limits.movetime && elapsed >= Limits.movetime)))
       || (Limits.nodes && Threads.nodes_searched() >= (uint64_t)Limits.nodes))
       Threads.stop = true;
 }

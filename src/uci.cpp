@@ -243,8 +243,8 @@ namespace {
         if (token == "searchmoves") // Needs to be the last command on the line
             while (is >> token)
                 limits.searchmoves.push_back(root_move(pos, token));
-        else if (token == "wtime")     is >> limits.time[WHITE];
-        else if (token == "btime")     is >> limits.time[BLACK];
+        else if (token == "wtime")     is >> limits.time[WHITE], limits.clockGiven = true;
+        else if (token == "btime")     is >> limits.time[BLACK], limits.clockGiven = true;
         else if (token == "winc")      is >> limits.inc[WHITE];
         else if (token == "binc")      is >> limits.inc[BLACK];
         else if (token == "movestogo") is >> limits.movestogo;

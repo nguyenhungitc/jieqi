@@ -90,16 +90,21 @@ struct LimitsType {
     time[WHITE] = time[BLACK] = inc[WHITE] = inc[BLACK] = npmsec = movetime = TimePoint(0);
     movestogo = depth = mate = perft = infinite = 0;
     nodes = 0;
+    clockGiven = false;
   }
 
+  // A clock was sent ("wtime" or "btime"), even with the value 0. Testing the
+  // values instead (time[WHITE] || time[BLACK]) treated "go wtime 0 btime 0" as a
+  // search without any limit: the engine thought until it received "stop".
   bool use_time_management() const {
-    return time[WHITE] || time[BLACK];
+    return clockGiven;
   }
 
   std::vector<Move> searchmoves, banmoves;
   TimePoint time[COLOR_NB], inc[COLOR_NB], npmsec, movetime, startTime;
   int movestogo, depth, mate, perft, infinite;
   int64_t nodes;
+  bool clockGiven;
 };
 
 extern LimitsType Limits;
