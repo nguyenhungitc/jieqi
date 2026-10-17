@@ -229,7 +229,27 @@ namespace {
   // sets the thinking time and other parameters from the input string, then starts
   // with a search.
 
-  void go(Position& pos, istringstream& is, StateListPtr& states, const std::vector<Move>& banmoves = {}) {
+  // add_root_move() appends the move written in 'token' to 'list' if it is a legal
+  // move of 'pos'. An unknown or illegal token used to be appended as MOVE_NONE:
+  // "go searchmoves zzzz" then matched no legal move, the root move list was empty
+  // and the engine answered "score mate 0" and "bestmove (none)" in a position
+  // with legal moves. Such a token is now reported and skipped.
+  void add_root_move(const Position& pos, const string& token, const char* command,
+                     std::vector<Move>& list) {
+
+    Move m = root_move(pos, token);
+    if (m == MOVE_NONE)
+        sync_cout << "info string error: " << command << " " << token
+                  << ": not a legal move in this position; ignored" << sync_endl;
+    else
+        list.push_back(m);
+  }
+
+  // The tokens of "banmoves" are kept as text and only turned into moves here, in
+  // the position that is searched. They used to be converted when "banmoves" was
+  // read: sent before "position", they were matched against the previous position
+  // and silently lost.
+  void go(Position& pos, istringstream& is, StateListPtr& states, const std::vector<string>& banTokens = {}) {
 
     Search::LimitsType limits;
     string token;
@@ -237,12 +257,13 @@ namespace {
 
     limits.startTime = now(); // The search starts as early as possible
 
-    limits.banmoves = banmoves;
+    for (const string& t : banTokens)
+        add_root_move(pos, t, "banmoves", limits.banmoves);
 
     while (is >> token)
         if (token == "searchmoves") // Needs to be the last command on the line
             while (is >> token)
-                limits.searchmoves.push_back(root_move(pos, token));
+                add_root_move(pos, token, "searchmoves", limits.searchmoves);
         else if (token == "wtime")     is >> limits.time[WHITE], limits.clockGiven = true;
         else if (token == "btime")     is >> limits.time[BLACK], limits.clockGiven = true;
         else if (token == "winc")      is >> limits.inc[WHITE];
@@ -348,7 +369,7 @@ void UCI::loop(int argc, char* argv[]) {
   for (int i = 1; i < argc; ++i)
       cmd += std::string(argv[i]) + " ";
 
-  std::vector<Move> banmoves = {};
+  std::vector<string> banmoves = {};
 
   do {
       if (argc == 1 && !getline(cin, cmd)) // Wait for an input or an end-of-file (EOF) indication
@@ -378,7 +399,7 @@ void UCI::loop(int argc, char* argv[]) {
       else if (token == "setoption")  setoption(is);
       else if (token == "banmoves")
           while (is >> token)
-              banmoves.push_back(root_move(pos, token));
+              banmoves.push_back(token);
       else if (token == "go")         go(pos, is, states, banmoves), banmoves.clear();
       else if (token == "position")   position(pos, is, states);
       else if (token == "fen" || token == "startpos") is.seekg(0), position(pos, is, states);
