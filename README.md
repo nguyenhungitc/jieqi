@@ -52,6 +52,14 @@ One commit per defect, in order:
 | `6caa43d` | TT replacement and aging (Pikafish) |
 | `fb003a5` | Low-ply history and main history aging (Pikafish) |
 | `4ac1f9f` | `tests/match.py`: match runner |
+| `bd3c179` | `setoption`: a non-numeric spin value is rejected (it terminated the engine) |
+| `a2e9667` | `go wtime 0 btime 0` is time-managed (it searched until `stop`); time limits wait for depth 1 |
+| `8358294` | `searchmoves` / `banmoves`: illegal tokens skipped; `banmoves` resolved at `go` |
+| `296fa74` | Root: `likelyFailLow` requires a TT hit |
+| `fbd45ab` | No `ponder` move that captures a face-down piece |
+| `2785d5e` | The king-capture debug print no longer goes into the UCI stream |
+| `a3e5f23` | `ChaseMap` reads its victims independently of byte order |
+| `755ec08` | `tests/match.py`: repetition, perpetual check and 60-move adjudication, dealt identities, timeouts |
 
 ## Headline results
 
@@ -74,8 +82,11 @@ state with a from-scratch recomputation. The scripts are not included here.
 
 `710e25b` to `fb003a5` port search techniques from Pikafish `master` (no NNUE). Each was
 measured with `tests/match.py`, which plays two engines through UCI and acts as the
-referee: it draws the identity of a face-down piece when it moves, from that side's pool,
-and replays every opening with colours swapped.
+referee, and replays every opening with colours swapped. These matches used the runner of
+`4ac1f9f`, which drew an identity when a face-down piece moved and did not adjudicate
+repetitions, perpetual checks or the 60-move rule (games ended in mate or at 300 plies).
+Since `755ec08` the identities are dealt before the game and those rules are applied, so
+new measurements are not directly comparable with the table below.
 
 | Match | Games | Nodes / move | Elo (95%) |
 |---|---|---|---|
@@ -107,7 +118,14 @@ small matches at short searches; confirm with an SPRT at the time control you us
   list is ignored. Positions sent as a FEN are unaffected.
 - **`ponder` and PV output.** No `ponder` move is printed when the best move or the reply
   moves a face-down piece, and a PV stops after its first face-down move: neither can be
-  sent back by a GUI without the identity.
+  sent back by a GUI without the identity. Nor when the reply captures a face-down piece,
+  whose identity is only known once the reply is played.
+- **`go` limits.** `wtime`/`btime` count as a clock even when 0: the engine completes
+  depth 1 and answers. Time limits (clock and `movetime`) apply only once depth 1 is
+  complete. `searchmoves` and `banmoves` tokens that are not legal moves print
+  `info string error: …` and are skipped; `banmoves` is matched against the position of
+  the next `go`, so it may come before `position`.
+- **`setoption`** ignores a spin value that is not a number instead of terminating.
 - **`fen()`** writes an empty pool as `-` instead of an empty field.
 - **Bench signature.** All 11 bench positions are searched now, and the search changes
   below change the search: the default `bench` gives 8570091.
@@ -131,6 +149,12 @@ These were verified but are not fixed:
 - **Face-down advisors are left out of the evaluation's attack maps**: `Evaluation` uses
   `pieces(Us, ADVISOR)`, and a face-down advisor has type `ADVISOR_B`. Changing it changes
   the evaluation and needs a strength test.
+- **The search is shallow in the opening.** A flip's children are searched at depth 0
+  (qsearch) once `darkTypes`, the product of the identity counts of the flips on the
+  line, exceeds `MAXDARKTYPES` (43), or from the fifth flip on (`MAXDARKDEPTH` = 4).
+  With full pools that is the third flip: from the start position `go depth 22` reports
+  `seldepth 6`, so the reported depth overstates the search there. Raising the limits
+  costs nodes at every chance node and needs a strength test at a fixed time control.
 - **`go perft` does not reveal**: after a dark move the piece stays face-down off its
   starting point and keeps moving like the piece type of that point, so the counts do not
   follow jieqi rules.
