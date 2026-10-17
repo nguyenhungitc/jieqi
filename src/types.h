@@ -107,9 +107,10 @@ constexpr int DARKVALRATE = 2862;//5000-10000
 constexpr int DARKMAXDIFF = 4812;//500-5000
 
 // For chasing detection
-union ChaseMap {
+// Bit (victim << 4) + attacker is set when the piece with id 'attacker' chases
+// the piece with id 'victim' (ids 0..15 per side, see Position::set_chase_info()).
+struct ChaseMap {
     uint64_t attacks[4] { };
-    uint16_t victims[16];
 
     // For adding victim <- attacker pair
     void operator |= (int id) {
@@ -125,11 +126,14 @@ union ChaseMap {
         return *this;
     }
 
-    // For victims extraction
+    // For victims extraction: bit i is set if victim i has any attacker, i.e. if
+    // bits 16*i .. 16*i+15 are not all zero. They used to be read through a union
+    // member uint16_t victims[16] aliasing attacks[], which only matches this bit
+    // layout on little-endian machines (the Makefile also has big-endian targets).
     operator uint16_t() {
         uint16_t ret = 0;
         for (int i = 0; i < 16; ++i)
-            if (this->victims[i])
+            if ((attacks[i >> 2] >> ((i & 3) * 16)) & 0xFFFF)
                 ret |= 1 << i;
         return ret;
     }
