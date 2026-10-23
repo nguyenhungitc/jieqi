@@ -1,7 +1,6 @@
 /*
-  Jieqi, a UCI jieqi engine derived from Pikafish and Stockfish
-  Copyright (C) 2026 The Jieqi developers
-  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
+  Jieqi, a UCI jieqi engine
+  Copyright (C) 2026 The Jieqi developers (see AUTHORS file)
 
   Jieqi is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -41,7 +40,7 @@ void TTEntry::save(Key k, Value v, bool pv, Bound b, Depth d, Move m, Value ev) 
       move16 = (uint16_t)m;
 
   // Overwrite less valuable entries (cheapest checks first). An entry of an older
-  // search is always replaced (from Pikafish). The generation sits in the upper 5
+  // search is always replaced. The generation sits in the upper 5
   // bits, above pv and bound: GENERATION_CYCLE absorbs their borrow, as in probe().
   const bool old = (TranspositionTable::GENERATION_CYCLE + TT.generation8 - genBound8)
                  & TranspositionTable::GENERATION_MASK;
@@ -60,7 +59,7 @@ void TTEntry::save(Key k, Value v, bool pv, Bound b, Depth d, Move m, Value ev) 
       eval16    = (int16_t)ev;
   }
 
-  // Secondary aging (from Pikafish): an entry that is kept is aged if it holds a
+  // Secondary aging: an entry that is kept is aged if it holds a
   // decisive inexact value, which helps elementary mate finding.
   else if (   depth8 + DEPTH_OFFSET >= 5
            && Bound(genBound8 & 0x3) != BOUND_EXACT

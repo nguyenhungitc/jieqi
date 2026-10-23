@@ -1,7 +1,6 @@
 /*
-  Jieqi, a UCI jieqi engine derived from Pikafish and Stockfish
-  Copyright (C) 2026 The Jieqi developers
-  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
+  Jieqi, a UCI jieqi engine
+  Copyright (C) 2026 The Jieqi developers (see AUTHORS file)
 
   Jieqi is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -195,7 +194,7 @@ namespace {
     return VALUE_DRAW - 1 + Value(thisThread->nodes & 0x2);
   }
 
-  // Correction history (from Pikafish, same weights): the static evaluation is
+  // Correction history: the static evaluation is
   // corrected by what the search found in positions with the same structure keys
   // and after the same moves. The TT keeps the uncorrected evaluation.
   int correction_value(const Thread* th, const Position& pos, const Stack* ss) {
@@ -481,7 +480,7 @@ void Thread::search() {
   complexityAverage.set(comp_1, 1);
 
   // History of the previous search: low-ply history restarts, the main history
-  // fades (from Pikafish).
+  // fades.
   lowPlyHistory.fill(99);
   for (Color c : { WHITE, BLACK })
       for (int i = 0; i < (1 << 14); ++i)
@@ -827,7 +826,7 @@ namespace {
     }
 
     // The entry was deep enough but its bound points the wrong way: it cannot cut
-    // off here, so it is worth less (from Pikafish).
+    // off here, so it is worth less.
     if (   !PvNode
         && !excludedMove
         && ss->ttHit
@@ -1635,12 +1634,12 @@ dark_undo:
         tte->save(posKey, value_to_tt(bestValue, ss->ply), ss->ttPv,
                   bestValue >= beta ? BOUND_LOWER :
                   PvNode && bestMove ? BOUND_EXACT : BOUND_UPPER,
-                  // A mated position (no move) holds at any depth (from Pikafish).
+                  // A mated position (no move) holds at any depth.
                   moveCount ? depth : std::min(MAX_PLY - 1, depth + 6),
                   bestMove, unadjustedStaticEval);
 
     // Update the correction history when the best move is not a capture and the
-    // error points the same way as the bound (from Pikafish).
+    // error points the same way as the bound.
     if (   !ss->inCheck
         && !(bestMove && pos.capture(bestMove))
         && (bestValue > ss->staticEval) == bool(bestMove))
@@ -1960,7 +1959,7 @@ dark_undo:
 
   // A mate that takes longer than the plies left before the 60-move rule ends the
   // game may be false (and the TT entry may come from a position with a lower
-  // counter): it is downgraded to the best non-mate score. From Pikafish.
+  // counter): it is downgraded to the best non-mate score.
   Value value_from_tt(Value v, int ply, int r60c) {
 
     if (v == VALUE_NONE)
@@ -2106,7 +2105,7 @@ void MainThread::check_time() {
   if (ponder)
       return;
 
-  // The time limits only apply once depth 1 is complete (as in later Stockfish):
+  // The time limits only apply once depth 1 is complete:
   // with almost no time left ("go wtime 0 btime 0") the search stopped during the
   // first iteration and played the first generated move, which was never searched.
   if (   (   completedDepth >= 1

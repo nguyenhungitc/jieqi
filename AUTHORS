@@ -1,0 +1,19 @@
+# Authors of Jieqi (https://github.com/nguyenhungitc/jieqi)
+the Jieqi developers
+
+# Jieqi is derived from the jieqi engine of Pikafish (branch jieqi_old), which
+# is derived from Stockfish. The authors of those projects keep their copyright
+# on the code they wrote:
+#
+#   Copyright (C) 2004-2023 The Stockfish developers
+#   Copyright (C) 2004-2022 The Pikafish developers
+#   Copyright (C) 2018-2022 PikaCat++ (magic numbers, src/magics.h)
+#
+# All of them are released under the GNU General Public License, version 3
+# or later (see Copying.txt).
+
+# Authors of Pikafish
+the Pikafish developers (https://github.com/official-pikafish/Pikafish/blob/master/AUTHORS)
+
+# Authors of Stockfish
+the Stockfish developers (https://github.com/official-stockfish/Stockfish/blob/master/AUTHORS)

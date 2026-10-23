@@ -1,7 +1,6 @@
 /*
-  Jieqi, a UCI jieqi engine derived from Pikafish and Stockfish
-  Copyright (C) 2026 The Jieqi developers
-  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
+  Jieqi, a UCI jieqi engine
+  Copyright (C) 2026 The Jieqi developers (see AUTHORS file)
 
   Jieqi is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -364,7 +363,7 @@ inline Bitboard Position::check_squares(PieceType pt) const {
 }
 
 // The TT key. It differs from st->key, which repetition detection uses, in two
-// ways (from Pikafish, against the graph history interaction): positions whose
+// ways (against the graph history interaction): positions whose
 // 60-move counter is high get a key per 8-ply bucket, so that results which depend
 // on the counter are not mixed, and a position that may have occurred earlier in
 // the game (bloom filter hit) gets a key of its own.

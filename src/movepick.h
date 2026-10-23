@@ -1,7 +1,6 @@
 /*
-  Jieqi, a UCI jieqi engine derived from Pikafish and Stockfish
-  Copyright (C) 2026 The Jieqi developers
-  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
+  Jieqi, a UCI jieqi engine
+  Copyright (C) 2026 The Jieqi developers (see AUTHORS file)
 
   Jieqi is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -91,7 +90,7 @@ enum StatsType { NoCaptures, Captures };
 typedef Stats<int16_t, 7183, COLOR_NB, 1 << 14> ButterflyHistory;
 
 /// LowPlyHistory is a ButterflyHistory for the first plies of the search, where
-/// move ordering matters most; it is reset at every new search (from Pikafish).
+/// move ordering matters most; it is reset at every new search.
 constexpr int LOW_PLY_HISTORY_SIZE = 5;
 typedef Stats<int16_t, 7183, LOW_PLY_HISTORY_SIZE, 1 << 14> LowPlyHistory;
 
@@ -111,7 +110,7 @@ typedef Stats<int16_t, 29952, PIECE_NB, SQUARE_NB> PieceToHistory;
 /// (~63 elo)
 typedef Stats<PieceToHistory, NOT_USED, PIECE_NB, SQUARE_NB> ContinuationHistory;
 
-/// Correction histories (from Pikafish) record how far the static evaluation was
+/// Correction histories record how far the static evaluation was
 /// from the search result, indexed by structure keys of the position
 /// ([side to move][key]) or by the moves leading to it ([piece][to] two, four and
 /// six plies back, then [piece][to] of the last move).

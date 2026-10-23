@@ -1,7 +1,6 @@
 /*
-  Jieqi, a UCI jieqi engine derived from Pikafish and Stockfish
-  Copyright (C) 2026 The Jieqi developers
-  Copyright (C) 2018-2022 PikaCat++
+  Jieqi, a UCI jieqi engine
+  Copyright (C) 2026 The Jieqi developers (see AUTHORS file)
   Jieqi is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or

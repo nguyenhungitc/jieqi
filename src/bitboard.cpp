@@ -1,7 +1,6 @@
 ﻿/*
-  Jieqi, a UCI jieqi engine derived from Pikafish and Stockfish
-  Copyright (C) 2026 The Jieqi developers
-  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
+  Jieqi, a UCI jieqi engine
+  Copyright (C) 2026 The Jieqi developers (see AUTHORS file)
 
   Jieqi is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -45,9 +44,7 @@ Magic KnightMagics[SQUARE_NB];
 Magic KnightToMagics[SQUARE_NB];
 
 namespace {
-  // TODO: 象的攻击位棋盘的大小需要扩展，需要重新计算，计算的代码查看
-  // https://github.com/PikaCat-OuO/Pikafish/blob/138caa98fdbfe18069f16ea99195cffb535e3191/src/bitboard.cpp#L216-L295
-  // https://github.com/ianfab/Fairy-Stockfish/commit/7b2c51be61f7fab5b945b16adf28a3f5167725c0
+  // TODO: 象的攻击位棋盘的大小需要扩展，需要重新计算；
   // 同时需要为象重新生成magic数字，放到magics.h里面
   Bitboard RookTable    [0x108000];  // To store rook attacks
   Bitboard CannonTable  [0x108000];  // To store cannon attacks

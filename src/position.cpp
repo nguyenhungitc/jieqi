@@ -1,7 +1,6 @@
 /*
-  Jieqi, a UCI jieqi engine derived from Pikafish and Stockfish
-  Copyright (C) 2026 The Jieqi developers
-  Copyright (C) 2004-2022 The Stockfish developers (see AUTHORS file)
+  Jieqi, a UCI jieqi engine
+  Copyright (C) 2026 The Jieqi developers (see AUTHORS file)
 
   Jieqi is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -415,7 +414,7 @@ void Position::set_check_info(StateInfo* si) const {
 
 
 /// Position::toggle_structure_keys() adds or removes piece pc on s in the structure
-/// keys that index the correction histories (classes as in Pikafish): pawnKey holds
+/// keys that index the correction histories: pawnKey holds
 /// the pawns and, for jieqi, the face-down pieces, which do not move until they
 /// reveal, and the pools that price them (their psqDark keys are added where the
 /// main key gets them); minorPieceKey holds knights and cannons; nonPawnKey[c] all
@@ -914,7 +913,7 @@ bool Position::do_move(Move m, StateInfo& newSt, bool givesCheck) {
   ++gamePly;
   ++st->pliesFromNull;
 
-  // 60-move rule counter (from Pikafish): a side's checks beyond 10 since the last
+  // 60-move rule counter: a side's checks beyond 10 since the last
   // reset do not count, nor do the replies to them. Reset below on a capture or a
   // reveal.
   if (!givesCheck || ++st->check10[sideToMove] <= 10)
