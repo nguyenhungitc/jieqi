@@ -1,0 +1,17 @@
+# Files from build
+**/*.o
+**/*.s
+src/.depend
+src/*.bak
+
+# Files from Qt
+*.pro
+*.pro.user
+
+# Files from VS
+src/.vs/
+src/x64/
+
+# Built binary
+src/jieqi*
+src/-lstdc++.res

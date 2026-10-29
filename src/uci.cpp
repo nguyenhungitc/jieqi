@@ -1,0 +1,515 @@
+/*
+  Jieqi, a UCI jieqi engine
+  Copyright (C) 2026 The Jieqi developers (see AUTHORS file)
+
+  Jieqi is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  Jieqi is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#include <cassert>
+#include <cmath>
+#include <iostream>
+#include <sstream>
+#include <string>
+
+#include "evaluate.h"
+#include "movegen.h"
+#include "position.h"
+#include "search.h"
+#include "thread.h"
+#include "timeman.h"
+#include "tt.h"
+#include "uci.h"
+
+using namespace std;
+
+namespace Jieqi {
+
+extern vector<string> setup_bench(const Position&, istream&);
+
+namespace {
+
+  //fen rest side - - 0 1
+  // FEN string for the initial position in standard xiangqi
+  //const char* StartFEN = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w";
+  const char* StartFEN = "xxxxkxxxx/9/1x5x1/x1x1x1x1x/9/9/X1X1X1X1X/1X5X1/9/XXXXKXXXX w R2A2C2P5N2B2r2a2c2p5n2b2 0 1";
+
+  // root_move() reads a move of "go searchmoves" or "banmoves". These take the same
+  // notation as "position ... moves", where a move may carry identity characters
+  // after its four square characters (e3e4P, b2b9Cn). They only select a root move,
+  // for which the squares are enough: passing the whole token to to_move() turned
+  // every such move into MOVE_NONE ("searchmoves e3e4P" gave "bestmove (none)",
+  // "banmoves c3c4P" did not ban c3c4).
+  Move root_move(const Position& pos, const string& token) {
+    if (token.size() < 4 || token.size() > 6)
+        return MOVE_NONE;
+    string str = token.substr(0, 4);
+    return UCI::to_move(pos, str);
+  }
+
+
+  // position() is called when the engine receives the "position" UCI command.
+  // It sets up the position that is described in the given FEN string ("fen") or
+  // the initial position ("startpos") and then makes the moves given in the following
+  // move list ("moves").
+
+  // parse_move() turns one token of a "position ... moves" list into a move, with the
+  // identities that the GUI supplies:
+  //   - a move of a face-down piece must carry its revealed identity as 5th
+  //     character, and may carry the identity of a captured face-down piece as 6th;
+  //   - a move of a face-up piece may carry the identity of a captured face-down
+  //     piece as 5th character.
+  // 'x' or 'X' as captured identity means "unknown". Every identity is checked
+  // against the position: it used to be applied blindly, which let a face-up rook
+  // turn into a knight, gave Red a black piece or a second king, emptied the pool of
+  // the wrong side, or put a key into the state that differs from set(fen()).
+  // Returns MOVE_NONE and sets 'err' when the token cannot be applied.
+
+  Move parse_move(const Position& pos, const string& token, PieceType& flipped, string& err) {
+
+    flipped = NO_PIECE_TYPE;
+    if (token.size() < 4 || token.size() > 6) { err = "expected 4 to 6 characters"; return MOVE_NONE; }
+
+    string str = token.substr(0, 4);
+    Move m = UCI::to_move(pos, str);
+    if (m == MOVE_NONE) { err = "not a legal move in this position"; return MOVE_NONE; }
+
+    Square from = from_sq(m), to = to_sq(m);
+    Color us = pos.side_to_move();
+    Piece target = pos.piece_on(to);
+    Piece pGet = NO_PIECE, pCaptured = NO_PIECE;
+    char capChar = 0;
+
+    if (pos.isDark(from))
+    {
+        // A face-down piece reveals when it moves, so its move must carry the identity.
+        // Without it the piece would stay dark off its starting point, which neither
+        // the move generator nor fen()/set() can represent.
+        if (token.size() < 5) { err = "moves a face-down piece without its revealed identity"; return MOVE_NONE; }
+        pGet = PieceExchange::charToPiece(token[4]);
+        if (pGet == NO_PIECE) { err = string("invalid revealed identity '") + token[4] + "'"; return MOVE_NONE; }
+        if (color_of(pGet) != us) { err = "revealed identity has the wrong colour"; return MOVE_NONE; }
+        if (type_of(pGet) == KING) { err = "a face-down piece cannot be a king"; return MOVE_NONE; }
+        if (!pos.pool_count(us, type_of(pGet))) { err = string("no face-down '") + token[4] + "' left in the pool"; return MOVE_NONE; }
+        if (token.size() == 6)
+            capChar = token[5];
+        flipped = type_of(pGet);
+    }
+    else
+    {
+        if (token.size() == 6) { err = "a face-up piece takes at most one identity character (the captured piece)"; return MOVE_NONE; }
+        if (token.size() == 5)
+            capChar = token[4];
+    }
+
+    if (capChar && capChar != 'x' && capChar != 'X')
+    {
+        pCaptured = PieceExchange::charToPiece(capChar);
+        if (pCaptured == NO_PIECE) { err = string("invalid captured identity '") + capChar + "'"; return MOVE_NONE; }
+        if (target == NO_PIECE) { err = "captured identity given for a move that captures nothing"; return MOVE_NONE; }
+        if (!pos.isDark(to))
+        {
+            // Redundant for a face-up piece; accepted only if it is the piece itself.
+            if (pCaptured != target) { err = "captured identity does not match the face-up piece on " + UCI::square(to); return MOVE_NONE; }
+            pCaptured = NO_PIECE;
+        }
+        else
+        {
+            if (color_of(pCaptured) != ~us) { err = "captured identity has the wrong colour"; return MOVE_NONE; }
+            if (type_of(pCaptured) == KING) { err = "a face-down piece cannot be a king"; return MOVE_NONE; }
+            if (!pos.pool_count(~us, type_of(pCaptured))) { err = string("no face-down '") + capChar + "' left in the opponent's pool"; return MOVE_NONE; }
+        }
+    }
+
+    return make_move(m, pGet, pCaptured);
+  }
+
+
+  // position() is called when the engine receives the "position" UCI command.
+  // It sets up the position that is described in the given FEN string ("fen") or
+  // the initial position ("startpos") and then makes the moves given in the following
+  // move list ("moves"). An invalid FEN leaves the current position unchanged; an
+  // invalid move stops the move list there. Both are reported with "info string".
+
+  void position(Position& pos, istringstream& is, StateListPtr& states) {
+
+    string token, fen;
+
+    is >> token;
+
+    if (token == "startpos")
+    {
+        fen = StartFEN;
+        is >> token; // Consume the "moves" token, if any
+    }
+    else if (token == "fen")
+    {
+        while (is >> token && token != "moves")
+            fen += token + " ";
+
+        string err;
+        if (!Position::fen_is_valid(fen, err))
+        {
+            sync_cout << "info string error: invalid FEN (" << err << "); position not changed" << sync_endl;
+            return;
+        }
+    }
+    else
+        return;
+
+    states = StateListPtr(new std::deque<StateInfo>(1)); // Drop the old state and create a new one
+    pos.set(fen, &states->back(), Threads.main());
+
+    // Parse the move list, if any
+    while (is >> token)
+    {
+        string err;
+        PieceType flipped;
+        Move m = parse_move(pos, token, flipped, err);
+        if (m == MOVE_NONE)
+        {
+            sync_cout << "info string error: move " << token << ": " << err
+                      << "; ignoring it and the rest of the move list" << sync_endl;
+            break;
+        }
+        states->emplace_back();
+        pos.do_move_temp(m, states->back(), flipped);
+    }
+  }
+
+  // trace_eval() prints the evaluation of the current position, consistent with
+  // the UCI options set so far.
+
+  void trace_eval(Position& pos) {
+
+    StateListPtr states(new std::deque<StateInfo>(1));
+    Position p;
+    p.set(pos.fen(), &states->back(), Threads.main());
+
+    sync_cout << "\n" << Eval::trace(p) << sync_endl;
+  }
+
+
+  // setoption() is called when the engine receives the "setoption" UCI command.
+  // The function updates the UCI option ("name") to the given value ("value").
+
+  void setoption(istringstream& is) {
+
+    string token, name, value;
+
+    is >> token; // Consume the "name" token
+
+    // Read the option name (can contain spaces)
+    while (is >> token && token != "value")
+        name += (name.empty() ? "" : " ") + token;
+
+    // Read the option value (can contain spaces)
+    while (is >> token)
+        value += (value.empty() ? "" : " ") + token;
+
+    if (Options.count(name))
+        Options[name] = value;
+    else
+        sync_cout << "No such option: " << name << sync_endl;
+  }
+
+
+  // go() is called when the engine receives the "go" UCI command. The function
+  // sets the thinking time and other parameters from the input string, then starts
+  // with a search.
+
+  // add_root_move() appends the move written in 'token' to 'list' if it is a legal
+  // move of 'pos'. An unknown or illegal token used to be appended as MOVE_NONE:
+  // "go searchmoves zzzz" then matched no legal move, the root move list was empty
+  // and the engine answered "score mate 0" and "bestmove (none)" in a position
+  // with legal moves. Such a token is now reported and skipped.
+  void add_root_move(const Position& pos, const string& token, const char* command,
+                     std::vector<Move>& list) {
+
+    Move m = root_move(pos, token);
+    if (m == MOVE_NONE)
+        sync_cout << "info string error: " << command << " " << token
+                  << ": not a legal move in this position; ignored" << sync_endl;
+    else
+        list.push_back(m);
+  }
+
+  // The tokens of "banmoves" are kept as text and only turned into moves here, in
+  // the position that is searched. They used to be converted when "banmoves" was
+  // read: sent before "position", they were matched against the previous position
+  // and silently lost.
+  void go(Position& pos, istringstream& is, StateListPtr& states, const std::vector<string>& banTokens = {}) {
+
+    Search::LimitsType limits;
+    string token;
+    bool ponderMode = false;
+
+    limits.startTime = now(); // The search starts as early as possible
+
+    for (const string& t : banTokens)
+        add_root_move(pos, t, "banmoves", limits.banmoves);
+
+    while (is >> token)
+        if (token == "searchmoves") // Needs to be the last command on the line
+            while (is >> token)
+                add_root_move(pos, token, "searchmoves", limits.searchmoves);
+        else if (token == "wtime")     is >> limits.time[WHITE], limits.clockGiven = true;
+        else if (token == "btime")     is >> limits.time[BLACK], limits.clockGiven = true;
+        else if (token == "winc")      is >> limits.inc[WHITE];
+        else if (token == "binc")      is >> limits.inc[BLACK];
+        else if (token == "movestogo") is >> limits.movestogo;
+        else if (token == "depth")     is >> limits.depth;
+        else if (token == "nodes")     is >> limits.nodes;
+        else if (token == "movetime")  is >> limits.movetime;
+        else if (token == "mate")      is >> limits.mate;
+        else if (token == "perft")     is >> limits.perft;
+        else if (token == "infinite")  limits.infinite = 1;
+        else if (token == "ponder")    ponderMode = true;
+
+    Threads.start_thinking(pos, states, limits, ponderMode);
+  }
+
+
+  // bench() is called when the engine receives the "bench" command.
+  // Firstly, a list of UCI commands is set up according to the bench
+  // parameters, then it is run one by one, printing a summary at the end.
+
+  void bench(Position& pos, istream& args, StateListPtr& states) {
+
+    string token;
+    uint64_t num, nodes = 0, cnt = 1;
+
+    vector<string> list = setup_bench(pos, args);
+    num = count_if(list.begin(), list.end(), [](string s) { return s.find("go ") == 0 || s.find("eval") == 0; });
+
+    TimePoint elapsed = now();
+
+    for (const auto& cmd : list)
+    {
+        istringstream is(cmd);
+        is >> skipws >> token;
+
+        if (token == "go" || token == "eval")
+        {
+            cerr << "\nPosition: " << cnt++ << '/' << num << " (" << pos.fen() << ")" << endl;
+            if (token == "go")
+            {
+               go(pos, is, states);
+               Threads.main()->wait_for_search_finished();
+               nodes += Threads.nodes_searched();
+            }
+            else
+               trace_eval(pos);
+        }
+        else if (token == "setoption")  setoption(is);
+        else if (token == "position")   position(pos, is, states);
+        else if (token == "ucinewgame") { Search::clear(); elapsed = now(); } // Search::clear() may take a while
+    }
+
+    elapsed = now() - elapsed + 1; // Ensure positivity to avoid a 'divide by zero'
+
+    dbg_print();
+
+    cerr << "\n==========================="
+         << "\nTotal time (ms) : " << elapsed
+         << "\nNodes searched  : " << nodes
+         << "\nNodes/second    : " << 1000 * nodes / elapsed << endl;
+  }
+
+  // The win rate model returns the probability of winning (in per mille units) given an
+  // eval and a game ply. It fits the LTC fishtest statistics rather accurately.
+  int win_rate_model(Value v, int ply) {
+
+     // The model only captures up to 188 plies, so limit the input and then rescale
+     double m = std::min(188, ply) / 32.0;
+
+     // The coefficients of a third-order polynomial fit is based on the fishtest data
+     // for two parameters that need to transform eval to the argument of a logistic
+     // function.
+     double as[] = {  5.13127523, -28.97359933,  73.29101963, 161.63731915 };
+     double bs[] = {  -1.2128046,   6.98062182,  -7.37399267, 48.36948019  };
+     double a = (((as[0] * m + as[1]) * m + as[2]) * m) + as[3];
+     double b = (((bs[0] * m + bs[1]) * m + bs[2]) * m) + bs[3];
+
+     // Transform the eval to centipawns with limited range
+     double x = std::clamp(double(100 * v) / PawnValueEg, -2000.0, 2000.0);
+
+     // Return the win rate in per mille units rounded to the nearest value
+     return int(0.5 + 1000 / (1 + std::exp((a - x) / b)));
+  }
+
+} // namespace
+
+
+/// UCI::loop() waits for a command from the stdin, parses it and then calls the appropriate
+/// function. It also intercepts an end-of-file (EOF) indication from the stdin to ensure a
+/// graceful exit if the GUI dies unexpectedly. When called with some command-line arguments, 
+/// like running 'bench', the function returns immediately after the command is executed.
+/// In addition to the UCI ones, some additional debug commands are also supported.
+
+void UCI::loop(int argc, char* argv[]) {
+
+  Position pos;
+  string token, cmd;
+  StateListPtr states(new std::deque<StateInfo>(1));
+
+  pos.set(StartFEN, &states->back(), Threads.main());
+
+  for (int i = 1; i < argc; ++i)
+      cmd += std::string(argv[i]) + " ";
+
+  std::vector<string> banmoves = {};
+
+  do {
+      if (argc == 1 && !getline(cin, cmd)) // Wait for an input or an end-of-file (EOF) indication
+          cmd = "quit";
+
+      istringstream is(cmd);
+
+      token.clear(); // Avoid a stale if getline() returns nothing or a blank line
+      is >> skipws >> token;
+
+      if (    token == "quit"
+          ||  token == "stop")
+          Threads.stop = true;
+
+      // The GUI sends 'ponderhit' to tell that the user has played the expected move.
+      // So, 'ponderhit' is sent if pondering was done on the same move that the user
+      // has played. The search should continue, but should also switch from pondering
+      // to the normal search.
+      else if (token == "ponderhit")
+          Threads.main()->ponder = false; // Switch to the normal search
+
+      else if (token == "uci")
+          sync_cout << "id name " << engine_info(true)
+                    << "\n"       << Options
+                    << "\nuciok"  << sync_endl;
+
+      else if (token == "setoption")  setoption(is);
+      else if (token == "banmoves")
+          while (is >> token)
+              banmoves.push_back(token);
+      else if (token == "go")         go(pos, is, states, banmoves), banmoves.clear();
+      else if (token == "position")   position(pos, is, states);
+      else if (token == "fen" || token == "startpos") is.seekg(0), position(pos, is, states);
+      else if (token == "ucinewgame") Search::clear();
+      else if (token == "isready")    sync_cout << "readyok" << sync_endl;
+
+      // Add custom non-UCI commands, mainly for debugging purposes.
+      // These commands must not be used during a search!
+      else if (token == "flip")     pos.flip();
+      else if (token == "bench")    bench(pos, is, states);
+      else if (token == "d")        sync_cout << pos << sync_endl;
+      else if (token == "s") {
+          istringstream is2(" depth 4");
+          go(pos, is2, states);
+          sync_cout << pos << sync_endl;
+      }
+      else if (token == "eval")     trace_eval(pos);
+      else if (token == "compiler") sync_cout << compiler_info() << sync_endl;
+      else if (token == "--help" || token == "help" || token == "--license" || token == "license")
+          sync_cout << "\nJieqi is a jieqi engine for playing and analyzing."
+                       "\nIt is released as free software licensed under the GNU GPLv3 License."
+                       "\nJieqi is normally used with a graphical user interface (GUI) and implements"
+                       "\nthe Universal Chess Interface (UCI) protocol to communicate with a GUI, an API, etc."
+                       "\nFor any further information, visit https://github.com/nguyenhungitc/jieqi#readme"
+                       "\nor read the corresponding README.md and Copying.txt files distributed along with this program.\n" << sync_endl;
+      else if (!token.empty() && token[0] != '#')
+          sync_cout << "Unknown command: '" << cmd << "'. Type help for more information." << sync_endl;
+
+  } while (token != "quit" && argc == 1); // The command-line arguments are one-shot
+}
+
+
+/// UCI::value() converts a Value to a string by adhering to the UCI protocol specification:
+///
+/// cp <x>    The score from the engine's point of view in centipawns.
+/// mate <y>  Mate in 'y' moves (not plies). If the engine is getting mated,
+///           uses negative values for 'y'.
+
+string UCI::value(Value v) {
+
+  assert(-VALUE_INFINITE < v && v < VALUE_INFINITE);
+
+  stringstream ss;
+
+  if (abs(v) < VALUE_MATE_IN_MAX_PLY)
+      ss << "cp " << v * 100 / PawnValueEg;
+  else
+      ss << "mate " << (v > 0 ? VALUE_MATE - v + 1 : -VALUE_MATE - v) / 2;
+
+  return ss.str();
+}
+
+
+/// UCI::wdl() reports the win-draw-loss (WDL) statistics given an evaluation
+/// and a game ply based on the data gathered for fishtest LTC games.
+
+string UCI::wdl(Value v, int ply) {
+
+  stringstream ss;
+
+  int wdl_w = win_rate_model( v, ply);
+  int wdl_l = win_rate_model(-v, ply);
+  int wdl_d = 1000 - wdl_w - wdl_l;
+  ss << " wdl " << wdl_w << " " << wdl_d << " " << wdl_l;
+
+  return ss.str();
+}
+
+
+/// UCI::square() converts a Square to a string in algebraic notation (g1, a7, etc.)
+
+std::string UCI::square(Square s) {
+  return std::string{ char('a' + file_of(s)), char('0' + rank_of(s)) };
+}
+
+
+/// UCI::move() converts a Move to a string in coordinate notation (g1f3, a7a8q).
+/// The only special case is castling where the e1g1 notation is printed in
+/// standard chess mode.
+/// Internally, all castling moves are always encoded as 'king captures rook'.
+
+string UCI::move(Move m) {
+
+  Square from = from_sq(m);
+  Square to = to_sq(m);
+
+  if (m == MOVE_NONE)
+      return "(none)";
+
+  if (m == MOVE_NULL)
+      return "0000";
+
+  string move = UCI::square(from) + UCI::square(to);
+
+  return move;
+}
+
+
+/// UCI::to_move() converts a string representing a move in coordinate notation
+/// (g1f3, a7a8q) to the corresponding legal Move, if any.
+
+Move UCI::to_move(const Position& pos, string& str) {
+
+  if (str.length() == 5)
+      str[4] = char(tolower(str[4])); // The promotion piece character must be lowercased
+
+  for (const auto& m : MoveList<LEGAL>(pos))
+      if (str == UCI::move(m))
+          return m;
+
+  return MOVE_NONE;
+}
+
+} // namespace Jieqi
